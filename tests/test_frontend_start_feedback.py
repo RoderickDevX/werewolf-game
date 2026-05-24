@@ -22,6 +22,15 @@ def test_start_game_restores_button_when_room_creation_fails():
     assert catch_index < restore_index
 
 
+def test_start_game_error_is_visible_inside_name_modal():
+    source = APP_JS.read_text(encoding="utf-8")
+    index_html = APP_JS.with_name("index.html").read_text(encoding="utf-8")
+
+    assert 'id="nameStatus"' in index_html
+    assert 'showNameStatus(message);' in source
+    assert 'showNameStatus("");' in source
+
+
 def test_start_game_busy_copy_says_prepare_game():
     source = APP_JS.read_text(encoding="utf-8")
 
@@ -290,7 +299,7 @@ def test_cartoon_werewolf_opening_uses_poster_artwork():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
 
     assert "<title>卡通狼人杀</title>" in index_html
-    assert 'src="/static/assets/uploaded-opening-poster.png"' in index_html
+    assert 'src="/static/assets/uploaded-opening-poster.webp"' in index_html
     assert 'class="poster-start-button"' in index_html
     assert '<button id="startButton" class="poster-start-button" type="button"' in index_html
     assert ".poster-start-button:hover" in css
@@ -314,11 +323,11 @@ def test_cartoon_werewolf_opening_uses_poster_artwork():
 
 def test_game_screen_uses_separate_cartoon_background():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
-    asset = APP_JS.with_name("assets") / "game-cartoon-background.png"
+    asset = APP_JS.with_name("assets") / "game-cartoon-background.webp"
 
     assert asset.exists()
     assert ".game-screen::before" in css
-    assert 'url("/static/assets/game-cartoon-background.png")' in css
+    assert 'url("/static/assets/game-cartoon-background.webp")' in css
     assert "filter: saturate(1.08);" in css
     assert "background: rgba(13, 17, 26, 0.52);" in css
     assert "backdrop-filter: blur(6px);" in css

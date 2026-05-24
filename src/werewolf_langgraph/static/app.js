@@ -51,6 +51,7 @@ function showNameModal() {
   if (room) return;
   const modal = document.querySelector("#nameModal");
   modal.classList.remove("hidden");
+  showNameStatus("");
   document.querySelector("#humanNameInput").focus();
 }
 
@@ -872,6 +873,7 @@ function setStartButtonState(state) {
   button.textContent = "开始游戏";
   if (confirmButton) confirmButton.textContent = isStarting ? "正在确认..." : "确认身份";
   showStartStatus(isStarting ? "正在准备游戏，请稍候..." : "");
+  showNameStatus(isStarting ? "正在准备游戏，请稍候..." : "");
 }
 
 function pickHumanSeat() {
@@ -880,10 +882,18 @@ function pickHumanSeat() {
 
 function showStartError(message) {
   showStartStatus(message);
+  showNameStatus(message);
 }
 
 function showStartStatus(message) {
   const status = document.querySelector("#startStatus");
+  if (status) {
+    status.textContent = message;
+  }
+}
+
+function showNameStatus(message) {
+  const status = document.querySelector("#nameStatus");
   if (status) {
     status.textContent = message;
   }

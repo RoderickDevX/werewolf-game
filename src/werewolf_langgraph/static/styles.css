@@ -205,7 +205,7 @@ button {
 .game-screen::before {
   background:
     linear-gradient(180deg, rgba(8, 12, 28, 0.04), rgba(8, 12, 28, 0.16)),
-    url("/static/assets/game-cartoon-background.png") center / cover fixed;
+    url("/static/assets/game-cartoon-background.webp") center / cover fixed;
   content: "";
   filter: saturate(1.08);
   inset: 0;
@@ -550,6 +550,15 @@ textarea {
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(92px, 0.6fr) minmax(0, 1fr);
+}
+
+.name-status {
+  color: rgba(245, 239, 231, 0.78);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  margin: -4px 0 0;
+  min-height: 22px;
 }
 
 .seer-reveal-card {
