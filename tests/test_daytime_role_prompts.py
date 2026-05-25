@@ -23,6 +23,11 @@ class CapturingLLM:
         return SimpleNamespace(content='{"thought": "test", "speech": "测试发言"}')
 
 
+class EmptySpeechLLM:
+    def invoke(self, messages):
+        return SimpleNamespace(content='{"thought": "test", "speech": ""}')
+
+
 def _prompt_from(agent, state):
     agent.speak(state)
     return agent.llm.messages[1].content
@@ -139,3 +144,14 @@ def test_day_prompt_includes_anime_tone_from_player_name():
     assert "你的发言语气参考“柯南”" in prompt
     assert "时间线、动机、发言漏洞、行为不一致" in prompt
     assert "狼人杀判断优先" in prompt
+
+
+def test_empty_model_speech_uses_neutral_fallback():
+    player = Player(id="1", name="一号", role=Role.VILLAGER)
+    state = GameState(players=[player], phase=Phase.DAY_DISCUSSION, day=1)
+
+    decision = RoleAgent(EmptySpeechLLM(), player).speak(state)
+
+    assert decision.record.content == "我先整理一下场上的发言，再看谁的逻辑更站不住脚。"
+    assert "不能一直过麦" not in decision.record.content
+    assert "视角不自然" not in decision.record.content

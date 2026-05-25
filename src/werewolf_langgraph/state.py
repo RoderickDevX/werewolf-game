@@ -155,7 +155,7 @@ def create_initial_state(players: list[Player]) -> GameState:
     return GameState(
         players=players,
         public_events=[
-            PublicEvent(day=1, phase=Phase.SETUP, content="Game created. Waiting for the first night.")
+            PublicEvent(day=1, phase=Phase.SETUP, content="游戏已创建，等待第一个夜晚开始。")
         ],
     )
 

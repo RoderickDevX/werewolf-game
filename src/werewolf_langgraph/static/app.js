@@ -31,6 +31,19 @@ const campNames = {
   villager: "好人阵营",
 };
 
+const playerAvatarMap = {
+  "柯南": "/static/assets/avatars/conan.webp",
+  "哆啦A梦": "/static/assets/avatars/doraemon.webp",
+  "蜡笔小新": "/static/assets/avatars/shinchan.webp",
+  "海绵宝宝": "/static/assets/avatars/spongebob.webp",
+  "小猪佩奇": "/static/assets/avatars/peppa.webp",
+  "猪猪侠": "/static/assets/avatars/ggbond.webp",
+  "懒羊羊": "/static/assets/avatars/lazy-yangyang.webp",
+  "奶龙": "/static/assets/avatars/nailong.webp",
+};
+
+const humanAvatar = "/static/assets/avatars/human.webp";
+
 const stageCopy = {
   setup: ["准备", "等待夜幕降临", "phaseSetup"],
   night_start: ["夜晚", "天黑请闭眼", "phaseNight"],
@@ -572,11 +585,28 @@ function renderPlayers(activeSpeakerId = null) {
     if (!player.is_alive) card.classList.add("dead");
     if (player.id === activeSpeakerId) card.classList.add("active-speaker");
     const roleLabel = player.is_human && !roleRevealed ? "身份待查看" : roleNames[player.role] || player.role;
-    card.innerHTML = `
-      <strong>${player.id}. ${player.name}${player.is_human ? "（你）" : ""}</strong>
-      <span>${roleLabel}</span>
-      <span>${player.is_alive ? "存活" : "出局"}</span>
-    `;
+    const avatarUrl = avatarForPlayer(player);
+    if (avatarUrl) {
+      const avatar = document.createElement("img");
+      avatar.className = "player-avatar";
+      avatar.src = avatarUrl;
+      avatar.alt = `${player.name}头像`;
+      avatar.loading = "lazy";
+      card.appendChild(avatar);
+    } else {
+      const fallback = document.createElement("div");
+      fallback.className = "player-avatar player-avatar-fallback";
+      fallback.textContent = player.name.trim().slice(0, 1) || "?";
+      card.appendChild(fallback);
+    }
+
+    const name = document.createElement("strong");
+    name.textContent = `${player.id}. ${player.name}${player.is_human ? "（你）" : ""}`;
+    const role = document.createElement("span");
+    role.textContent = roleLabel;
+    const status = document.createElement("span");
+    status.textContent = player.is_alive ? "存活" : "出局";
+    card.append(name, role, status);
     container.appendChild(card);
   }
 }
@@ -791,6 +821,11 @@ function getHumanPlayer() {
 
 function getPlayer(playerId) {
   return room.players.find((player) => player.id === playerId);
+}
+
+function avatarForPlayer(player) {
+  if (player.is_human) return humanAvatar;
+  return playerAvatarMap[player.name] || null;
 }
 
 function phaseLabel(phase) {

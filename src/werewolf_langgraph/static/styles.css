@@ -318,9 +318,35 @@ button {
   background: rgba(255, 255, 255, 0.055);
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 8px;
-  min-height: 104px;
+  display: grid;
+  justify-items: center;
+  min-height: 164px;
   padding: 13px;
+  text-align: center;
   transition: border-color 240ms ease, box-shadow 240ms ease, transform 240ms ease;
+}
+
+.player-avatar {
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  display: block;
+  height: 76px;
+  margin-bottom: 10px;
+  object-fit: contain;
+  width: 76px;
+}
+
+.player-avatar-fallback {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(255, 225, 122, 0.18), rgba(88, 152, 216, 0.16)),
+    rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 230, 168, 0.22);
+  color: var(--gold);
+  display: grid;
+  font-size: 30px;
+  font-weight: 900;
+  place-items: center;
 }
 
 .player.active-speaker {
@@ -340,7 +366,9 @@ button {
 }
 
 .player strong {
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .player span {

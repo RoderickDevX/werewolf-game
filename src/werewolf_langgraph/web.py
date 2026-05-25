@@ -191,6 +191,7 @@ def _get_room(room_id: str) -> Room:
 def _serialize_room(room: Room) -> dict[str, Any]:
     game_state = graph_state_to_game_state(room.state)
     human = next(player for player in game_state.players if player.id == room.human_id)
+    show_wolf_teammates = human.role == Role.WEREWOLF and not bool(game_state.winner)
     return {
         "room_id": room.room_id,
         "human_id": room.human_id,
@@ -203,7 +204,10 @@ def _serialize_room(room: Room) -> dict[str, Any]:
         "wolf_teammates": _serialize_wolf_teammates(game_state.players, human),
         "waiting_for": room.waiting_for,
         "players": [
-            _serialize_player(player, reveal_role=_should_reveal_role(player, room.human_id, bool(game_state.winner)))
+            _serialize_player(
+                player,
+                reveal_role=_should_reveal_role(player, room.human_id, bool(game_state.winner), show_wolf_teammates),
+            )
             for player in game_state.players
         ],
         "speeches": [_serialize_dataclass(record) for record in game_state.speeches],
@@ -223,8 +227,12 @@ def _serialize_player(player: Player, reveal_role: bool) -> dict[str, Any]:
     }
 
 
-def _should_reveal_role(player: Player, human_id: str, game_over: bool) -> bool:
-    return player.id == human_id or game_over or (player.role == Role.HUNTER and not player.is_alive)
+def _should_reveal_role(player: Player, human_id: str, game_over: bool, show_wolf_teammates: bool = False) -> bool:
+    if player.id == human_id or game_over or (player.role == Role.HUNTER and not player.is_alive):
+        return True
+    if show_wolf_teammates and player.role == Role.WEREWOLF:
+        return True
+    return False
 
 
 def _serialize_wolf_teammates(players: list[Player], human: Player) -> list[dict[str, str]]:

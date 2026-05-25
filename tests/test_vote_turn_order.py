@@ -82,7 +82,7 @@ def test_day_vote_enters_result_screen_before_next_round():
     assert result["phase"] == Phase.DAY_VOTE
     assert result["day"] == 1
     assert result["night"] == 1
-    assert any(event.phase == Phase.DAY_VOTE and event.content.startswith("4 ") for event in result["public_events"])
+    assert any(event.phase == Phase.DAY_VOTE and event.content == "4被放逐出局。" for event in result["public_events"])
 
 
 
@@ -108,7 +108,7 @@ def test_day_vote_winner_still_enters_vote_result_screen_before_game_over():
     assert result["stage"] == Stage.DAY_VOTE_RESULT
     assert result["phase"] == Phase.GAME_OVER
     assert result["winner"] == "werewolf"
-    assert any(event.phase == Phase.DAY_VOTE and event.content.startswith("2 ") for event in result["public_events"])
+    assert any(event.phase == Phase.DAY_VOTE and event.content == "2被放逐出局。" for event in result["public_events"])
 
 
 def test_night_winner_enters_night_result_screen_before_game_over():

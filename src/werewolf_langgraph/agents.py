@@ -449,7 +449,7 @@ class RoleAgent:
         )
         speech = data.get("speech")
         if not isinstance(speech, str) or not speech.strip():
-            speech = "我先明确表态：现在不能一直过麦。前面发言里有人视角不自然，我会重点听他的解释。"
+            speech = "我先整理一下场上的发言，再看谁的逻辑更站不住脚。"
 
         return SpeechDecision(
             record=SpeechRecord(

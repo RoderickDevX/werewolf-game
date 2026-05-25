@@ -86,7 +86,7 @@ def _enter_night(state: GraphState) -> dict[str, Any]:
         "pending_hunter_return_stage": None,
         "public_events": [
             *state["public_events"],
-            public_event(state, f"Night {night} begins.", Phase.NIGHT),
+            public_event(state, f"第 {night} 夜开始。", Phase.NIGHT),
         ],
     }
 
@@ -113,7 +113,7 @@ def _wolf_action(state: GraphState, llm: BaseChatModel) -> dict[str, Any]:
             "pending_wolf_target_id": target_id,
             "public_events": [
                 *state["public_events"],
-                public_event(state, "Werewolves have chosen a night target.", Phase.NIGHT),
+                public_event(state, "狼人已选定夜晚袭击目标。", Phase.NIGHT),
             ],
         }
 
@@ -125,7 +125,7 @@ def _wolf_action(state: GraphState, llm: BaseChatModel) -> dict[str, Any]:
         "pending_wolf_target_id": target_id,
         "public_events": [
             *state["public_events"],
-            public_event(state, "Werewolves have chosen a night target.", Phase.NIGHT),
+            public_event(state, "狼人已选定夜晚袭击目标。", Phase.NIGHT),
         ],
     }
 
@@ -166,7 +166,7 @@ def _seer_action(state: GraphState, llm: BaseChatModel) -> dict[str, Any]:
         "seer_checks": [*state["seer_checks"], check],
         "public_events": [
             *state["public_events"],
-            public_event(state, "Seer has completed inspection.", Phase.NIGHT),
+            public_event(state, "预言家已完成查验。", Phase.NIGHT),
         ],
     }
 
@@ -214,7 +214,7 @@ def _witch_action(state: GraphState, llm: BaseChatModel) -> dict[str, Any]:
         ),
         "public_events": [
             *state["public_events"],
-            public_event(state, "Witch has completed night action.", Phase.NIGHT),
+            public_event(state, "女巫已完成夜晚行动。", Phase.NIGHT),
         ],
     }
     return {**_resolve_night(action_state), "witch_inventory": action_state["witch_inventory"]}
@@ -276,7 +276,7 @@ def _resolve_night(state: GraphState) -> dict[str, Any]:
             "pending_witch_poison_id": None,
             "pending_hunter_id": None,
             "pending_hunter_return_stage": None,
-            "public_events": [*events, public_event(state, f"{winner.value} camp wins.", Phase.GAME_OVER)],
+            "public_events": [*events, public_event(state, _winner_text(winner), Phase.GAME_OVER)],
         }
 
     return {
@@ -334,7 +334,7 @@ def _resolve_hunter_shot(state: GraphState, target_id: str) -> dict[str, Any]:
         "pending_hunter_id": None,
         "public_events": [
             *state["public_events"],
-            public_event(state, f"{hunter.name if hunter else 'Hunter'} shot {target.name}.", state["phase"]),
+            public_event(state, f"{hunter.name if hunter else '猎人'}开枪带走了{target.name}。", state["phase"]),
         ],
     }
     return _finish_after_hunter_shot(next_state)
@@ -360,7 +360,7 @@ def _finish_after_hunter_shot(state: GraphState) -> dict[str, Any]:
             "winner": winner.value,
             "public_events": [
                 *state["public_events"],
-                public_event(state, f"{winner.value} camp wins.", Phase.GAME_OVER),
+                public_event(state, _winner_text(winner), Phase.GAME_OVER),
             ],
         }
     if return_stage == Stage.NIGHT_RESULT:
@@ -374,7 +374,7 @@ def _enter_day_discussion(state: GraphState) -> dict[str, Any]:
         "stage": Stage.DAY_DISCUSSION,
         "public_events": [
             *state["public_events"],
-            public_event(state, f"Day {state['day']} discussion begins.", Phase.DAY_DISCUSSION),
+            public_event(state, f"第 {state['day']} 天发言开始。", Phase.DAY_DISCUSSION),
         ],
     }
 
@@ -391,7 +391,7 @@ def _day_discussion(state: GraphState, llm: BaseChatModel) -> dict[str, Any]:
             "speeches": speeches,
             "public_events": [
                 *state["public_events"],
-                public_event(state, f"Day {state['day']} discussion completed.", Phase.DAY_DISCUSSION),
+                public_event(state, f"第 {state['day']} 天发言结束。", Phase.DAY_DISCUSSION),
             ],
         }
 
@@ -417,7 +417,7 @@ def _day_discussion(state: GraphState, llm: BaseChatModel) -> dict[str, Any]:
         "speeches": speeches,
         "public_events": [
             *state["public_events"],
-            public_event(state, f"{next_speaker.name} has spoken.", Phase.DAY_DISCUSSION),
+            public_event(state, f"{next_speaker.name}已完成发言。", Phase.DAY_DISCUSSION),
         ],
     }
 
@@ -428,7 +428,7 @@ def _enter_day_vote(state: GraphState) -> dict[str, Any]:
         "stage": Stage.DAY_VOTE,
         "public_events": [
             *state["public_events"],
-            public_event(state, f"Day {state['day']} voting begins.", Phase.DAY_VOTE),
+            public_event(state, f"第 {state['day']} 天投票开始。", Phase.DAY_VOTE),
         ],
     }
 
@@ -464,7 +464,7 @@ def _day_vote(state: GraphState, llm: BaseChatModel) -> dict[str, Any]:
             "votes": votes,
             "public_events": [
                 *state["public_events"],
-                public_event(state, f"{voter.name} voted for {target.name}.", Phase.DAY_VOTE),
+                public_event(state, f"{voter.name}投票给{target.name}。", Phase.DAY_VOTE),
             ],
         }
 
@@ -474,7 +474,7 @@ def _day_vote(state: GraphState, llm: BaseChatModel) -> dict[str, Any]:
     executed = get_player(game_state, executed_id)
     events = [
         *state["public_events"],
-        public_event(state, f"{executed.name} 被放逐出局。", Phase.DAY_VOTE),
+        public_event(state, f"{executed.name}被放逐出局。", Phase.DAY_VOTE),
     ]
 
     if executed.role == Role.HUNTER:
@@ -514,7 +514,7 @@ def _day_vote(state: GraphState, llm: BaseChatModel) -> dict[str, Any]:
             "pending_witch_poison_id": None,
             "pending_hunter_id": None,
             "pending_hunter_return_stage": None,
-            "public_events": [*events, public_event(state, f"{winner.value} camp wins.", Phase.GAME_OVER)],
+            "public_events": [*events, public_event(state, _winner_text(winner), Phase.GAME_OVER)],
         }
 
     return {
@@ -641,6 +641,10 @@ def _has_vote_today(state: Any, player_id: str) -> bool:
 
 def _night_result_text(game_state, dead_ids: list[str]) -> str:
     if not dead_ids:
-        return "Night ended. No players died."
-    names = ", ".join(get_player(game_state, player_id).name for player_id in dead_ids)
-    return f"Night ended. Dead players: {names}."
+        return "夜晚结束，无人死亡。"
+    names = "、".join(get_player(game_state, player_id).name for player_id in dead_ids)
+    return f"夜晚结束，死亡玩家：{names}。"
+
+
+def _winner_text(winner: Camp) -> str:
+    return "狼人阵营获胜。" if winner == Camp.WEREWOLF else "好人阵营获胜。"

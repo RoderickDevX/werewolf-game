@@ -351,3 +351,45 @@ def test_game_screen_uses_separate_cartoon_background():
     assert "background: rgba(13, 17, 26, 0.52);" in css
     assert "backdrop-filter: blur(6px);" in css
     assert "rgba(4, 7, 14, 0.72)" not in css
+
+
+def test_player_avatar_mapping_and_rendering_exist():
+    source = APP_JS.read_text(encoding="utf-8")
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+
+    for character_name in [
+        "柯南",
+        "哆啦A梦",
+        "蜡笔小新",
+        "海绵宝宝",
+        "小猪佩奇",
+        "猪猪侠",
+        "懒羊羊",
+        "奶龙",
+    ]:
+        assert character_name in source
+
+    assert "const playerAvatarMap = {" in source
+    assert "function avatarForPlayer(player)" in source
+    assert 'const humanAvatar = "/static/assets/avatars/human.webp";' in source
+    assert "if (player.is_human) return humanAvatar;" in source
+    assert 'avatar.className = "player-avatar";' in source
+    assert "avatar.alt = `${player.name}头像`;" in source
+    assert ".player-avatar" in css
+
+
+def test_player_avatar_assets_exist():
+    avatar_dir = APP_JS.with_name("assets") / "avatars"
+
+    for filename in [
+        "conan.webp",
+        "doraemon.webp",
+        "shinchan.webp",
+        "spongebob.webp",
+        "peppa.webp",
+        "ggbond.webp",
+        "lazy-yangyang.webp",
+        "nailong.webp",
+        "human.webp",
+    ]:
+        assert (avatar_dir / filename).exists()
