@@ -181,7 +181,7 @@ function renderAvatarChoices(available = avatarChoices) {
     button.type = "button";
     button.setAttribute("aria-pressed", isSelected ? "true" : "false");
     button.innerHTML = `
-      <img src="${avatarImage(avatar.id)}" alt="" loading="lazy" decoding="async" />
+      <img src="${avatarImage(avatar.id)}" alt="" loading="lazy" decoding="async" width="42" height="42" />
       <span>${avatar.name}</span>
     `;
     button.addEventListener("click", () => {
@@ -338,7 +338,7 @@ function renderWaitingRoom() {
     card.className = `waiting-seat${member ? "" : " ai"}${member?.id === localPlayerId ? " mine" : ""}`;
     card.innerHTML = member
       ? `
-        <img class="waiting-seat-avatar" src="${avatarImage(member.avatar_id)}" alt="" loading="lazy" decoding="async" />
+        <img class="waiting-seat-avatar" src="${avatarImage(member.avatar_id)}" alt="" loading="lazy" decoding="async" width="40" height="40" />
         <strong>${seat}. ${member.name}${member.id === localPlayerId ? "（我）" : ""}</strong>
         <span>${member.is_host ? "房主" : member.is_ready ? "已准备" : "未准备"}</span>
       `
@@ -1001,6 +1001,8 @@ function renderPlayers(activeSpeakerId = null) {
       avatar.alt = `${player.name}头像`;
       avatar.loading = "lazy";
       avatar.decoding = "async";
+      avatar.width = 76;
+      avatar.height = 76;
       card.appendChild(avatar);
     } else {
       const fallback = document.createElement("div");

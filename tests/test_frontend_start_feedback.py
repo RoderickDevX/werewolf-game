@@ -461,7 +461,10 @@ def test_mobile_lobby_avatar_grid_and_waiting_room_helpers_exist():
     assert "let selectedAvatarId = avatarChoices[0].id;" in source
     assert "function renderAvatarChoices" in source
     assert "avatar-choice-button" in source
-    assert 'loading="lazy" decoding="async"' in source
+    assert 'loading="lazy" decoding="async" width="42" height="42"' in source
+    assert 'loading="lazy" decoding="async" width="40" height="40"' in source
+    assert 'avatar.width = 76;' in source
+    assert 'avatar.height = 76;' in source
     assert 'document.querySelector("#avatarChoiceGrid")' in source
     assert 'document.querySelector("#copyRoomCodeButton")?.addEventListener("click", copyWaitingRoomCode);' in source
     assert "async function copyWaitingRoomCode()" in source
