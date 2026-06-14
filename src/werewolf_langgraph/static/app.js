@@ -63,7 +63,7 @@ const playerAvatarMap = {
   "猪猪侠": "/static/assets/avatars/ggbond.webp",
   "懒羊羊": "/static/assets/avatars/lazy-yangyang.webp",
   "奶龙": "/static/assets/avatars/nailong.webp",
-  "加菲猫": "/static/assets/avatars/garfield.png",
+  "加菲猫": "/static/assets/avatars/garfield.webp",
 };
 
 const humanAvatar = "/static/assets/avatars/human.webp";
@@ -405,7 +405,7 @@ function avatarName(avatarId) {
 function avatarImage(avatarId) {
   const avatar = avatarChoices.find((choice) => choice.id === avatarId);
   if (!avatar || avatar.id === "human") return humanAvatar;
-  if (avatar.id === "garfield") return "/static/assets/avatars/garfield.png";
+  if (avatar.id === "garfield") return "/static/assets/avatars/garfield.webp";
   return `/static/assets/avatars/${avatar.id}.webp`;
 }
 

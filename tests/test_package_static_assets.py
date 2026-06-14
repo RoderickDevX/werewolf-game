@@ -52,7 +52,9 @@ class PackageStaticAssetsTest(unittest.TestCase):
             "werewolf_langgraph/static/app.js",
             "werewolf_langgraph/static/assets/uploaded-opening-poster.webp",
             "werewolf_langgraph/static/assets/game-cartoon-background.webp",
+            "werewolf_langgraph/static/assets/game-mobile-character-background.webp",
             "werewolf_langgraph/static/assets/avatars/human.webp",
+            "werewolf_langgraph/static/assets/avatars/garfield.webp",
         }
         self.assertTrue(expected_assets.issubset(names), sorted(expected_assets - names))
 

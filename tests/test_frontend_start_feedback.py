@@ -390,11 +390,11 @@ def test_opening_poster_waits_for_image_load_before_showing_controls():
 
 def test_game_screen_uses_separate_cartoon_background():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
-    asset = APP_JS.with_name("assets") / "game-mobile-character-background.png"
+    asset = APP_JS.with_name("assets") / "game-mobile-character-background.webp"
 
     assert asset.exists()
     assert ".game-screen::before" in css
-    assert 'url("/static/assets/game-mobile-character-background.png")' in css
+    assert 'url("/static/assets/game-mobile-character-background.webp")' in css
     assert "filter: saturate(1.08);" in css
     assert "background: rgba(13, 17, 26, 0.52);" in css
     assert "backdrop-filter: blur(6px);" in css
@@ -422,7 +422,7 @@ def test_player_avatar_mapping_and_rendering_exist():
     assert 'const humanAvatar = "/static/assets/avatars/human.webp";' in source
     assert "if (player.avatar_id) return avatarImage(player.avatar_id);" in source
     assert "if (player.is_human) return humanAvatar;" not in source
-    assert '"加菲猫": "/static/assets/avatars/garfield.png",' in source
+    assert '"加菲猫": "/static/assets/avatars/garfield.webp",' in source
     assert 'avatar.className = "player-avatar";' in source
     assert "avatar.alt = `${player.name}头像`;" in source
     assert ".player-avatar" in css
@@ -441,7 +441,7 @@ def test_player_avatar_assets_exist():
         "lazy-yangyang.webp",
         "nailong.webp",
         "human.webp",
-        "garfield.png",
+        "garfield.webp",
     ]:
         assert (avatar_dir / filename).exists()
 
@@ -451,7 +451,7 @@ def test_multiplayer_avatar_choice_replaces_default_human_with_garfield():
 
     assert '{ id: "garfield", name: "加菲猫" }' in source
     assert '{ id: "human", name: "默认玩家" }' not in source
-    assert 'if (avatar.id === "garfield") return "/static/assets/avatars/garfield.png";' in source
+    assert 'if (avatar.id === "garfield") return "/static/assets/avatars/garfield.webp";' in source
     assert 'const humanAvatar = "/static/assets/avatars/human.webp";' in source
 
 

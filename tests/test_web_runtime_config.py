@@ -1,5 +1,7 @@
 import sys
 
+from fastapi.testclient import TestClient
+
 from werewolf_langgraph import web
 
 
@@ -39,3 +41,19 @@ def test_main_allows_cli_overrides(monkeypatch):
 
     assert captured["kwargs"]["host"] == "127.0.0.1"
     assert captured["kwargs"]["port"] == 8123
+
+
+def test_static_assets_are_cacheable_while_html_and_api_remain_no_store():
+    client = TestClient(web.create_app())
+
+    html_response = client.get("/", headers={"host": "werewolf.roderickdev.cn"})
+    assert "no-store" in html_response.headers["Cache-Control"]
+
+    api_response = client.get("/api/rooms")
+    assert "no-store" in api_response.headers["Cache-Control"]
+
+    static_response = client.get("/static/assets/avatars/shinchan.webp")
+    assert static_response.status_code == 200
+    assert "no-store" not in static_response.headers["Cache-Control"]
+    assert "public" in static_response.headers["Cache-Control"]
+    assert "max-age=" in static_response.headers["Cache-Control"]
