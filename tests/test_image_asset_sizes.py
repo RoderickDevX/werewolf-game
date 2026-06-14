@@ -10,3 +10,15 @@ def test_avatar_webp_assets_are_small_enough_for_mobile_lobby():
 
     for avatar_path in avatar_dir.glob("*.webp"):
         assert avatar_path.stat().st_size <= max_avatar_bytes, avatar_path.name
+
+
+def test_static_image_payload_stays_small_for_mobile_visits():
+    asset_dir = STATIC_DIR / "assets"
+    max_single_image_bytes = 100 * 1024
+    max_total_image_bytes = 300 * 1024
+    image_paths = sorted(asset_dir.glob("*.webp")) + sorted((asset_dir / "avatars").glob("*.webp"))
+
+    for image_path in image_paths:
+        assert image_path.stat().st_size <= max_single_image_bytes, image_path.name
+
+    assert sum(image_path.stat().st_size for image_path in image_paths) <= max_total_image_bytes
