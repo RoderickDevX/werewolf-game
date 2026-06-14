@@ -1,0 +1,12 @@
+services:
+  werewolf:
+    build: .
+    container_name: werewolf-game
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      WEREWOLF_HOST: 0.0.0.0
+      WEREWOLF_PORT: 8000
+    ports:
+      - "8000:8000"

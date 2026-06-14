@@ -1,17 +1,39 @@
 let room = null;
+let localPlayerId = null;
 let currentStage = "setup";
 let renderedSpeechKeys = new Set();
 let discussionPlaybackRunning = false;
 let votePlaybackRunning = false;
 let autoAdvanceTimer = null;
+let autoAdvanceStage = null;
 let discussionAdvanceTimer = null;
+let discussionAdvanceKey = null;
 let voteAdvanceTimer = null;
+let voteAdvanceKey = null;
+let roomPollTimer = null;
+let roomPollRequestId = 0;
+let roomRequestInFlight = false;
 let roleRevealed = false;
 let pendingChoice = null;
 let pendingSeerReveal = null;
 let witchActionFlow = null;
 
+const LOCAL_SESSION_KEY = "werewolf.roomSession";
+const ROOM_POLL_INTERVAL_MS = 1500;
+
 const DEFAULT_HUMAN_NAME = "打摆子的家伙";
+const avatarChoices = [
+  { id: "shinchan", name: "蜡笔小新" },
+  { id: "lazy-yangyang", name: "懒羊羊" },
+  { id: "ggbond", name: "猪猪侠" },
+  { id: "conan", name: "柯南" },
+  { id: "doraemon", name: "哆啦 A 梦" },
+  { id: "peppa", name: "小猪佩奇" },
+  { id: "nailong", name: "奶龙" },
+  { id: "spongebob", name: "海绵宝宝" },
+  { id: "garfield", name: "加菲猫" },
+];
+let selectedAvatarId = avatarChoices[0].id;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const roleNames = {
@@ -41,6 +63,7 @@ const playerAvatarMap = {
   "猪猪侠": "/static/assets/avatars/ggbond.webp",
   "懒羊羊": "/static/assets/avatars/lazy-yangyang.webp",
   "奶龙": "/static/assets/avatars/nailong.webp",
+  "加菲猫": "/static/assets/avatars/garfield.png",
 };
 
 const humanAvatar = "/static/assets/avatars/human.webp";
@@ -60,6 +83,348 @@ const stageCopy = {
   day_vote_result: ["放逐结果", "查看投票结局", "phaseVoteResult"],
   game_over: ["胜负判定", "游戏结束", "phaseResult"],
 };
+
+function initializeLobby() {
+  populateAvatarSelect("#createAvatarSelect");
+  renderAvatarChoices();
+  bindLobbyEvents();
+  if (!restoreLocalSession()) {
+    loadLobbyRooms();
+  }
+}
+
+function bindLobbyEvents() {
+  document.querySelector("#refreshRoomsButton")?.addEventListener("click", loadLobbyRooms);
+  document.querySelector("#createRoomButton")?.addEventListener("click", createLobbyRoom);
+  document.querySelector("#readyButton")?.addEventListener("click", toggleReady);
+  document.querySelector("#startRoomButton")?.addEventListener("click", startWaitingRoom);
+  document.querySelector("#copyRoomCodeButton")?.addEventListener("click", copyWaitingRoomCode);
+  document.querySelector("#backToLobbyButton")?.addEventListener("click", () => {
+    room = null;
+    localPlayerId = null;
+    clearLocalSession();
+    stopRoomPolling();
+    showScreen("lobby");
+    loadLobbyRooms();
+  });
+}
+
+function saveLocalSession(nextRoom) {
+  if (!nextRoom?.room_id || !nextRoom?.human_id) return;
+  localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ roomId: nextRoom.room_id, playerId: nextRoom.human_id }));
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", nextRoom.room_id);
+  window.history.replaceState({}, "", url);
+}
+
+function clearLocalSession() {
+  localStorage.removeItem(LOCAL_SESSION_KEY);
+  const url = new URL(window.location.href);
+  url.searchParams.delete("room");
+  window.history.replaceState({}, "", url);
+}
+
+function restoreLocalSession() {
+  const params = new URLSearchParams(window.location.search);
+  const roomIdFromUrl = params.get("room");
+  const raw = localStorage.getItem(LOCAL_SESSION_KEY);
+  if (!raw) return false;
+  try {
+    const saved = JSON.parse(raw);
+    if (!saved?.roomId || !saved?.playerId) return false;
+    if (roomIdFromUrl && roomIdFromUrl !== saved.roomId) return false;
+    room = { room_id: saved.roomId };
+    localPlayerId = saved.playerId;
+    fetchRoomState();
+    startRoomPolling();
+    return true;
+  } catch (error) {
+    clearLocalSession();
+    return false;
+  }
+}
+
+function populateAvatarSelect(selector, available = avatarChoices) {
+  const select = document.querySelector(selector);
+  if (!select) return;
+  select.innerHTML = "";
+  const nextAvailable = available.length ? available : avatarChoices;
+  if (!nextAvailable.some((avatar) => avatar.id === selectedAvatarId)) {
+    selectedAvatarId = nextAvailable[0].id;
+  }
+  for (const avatar of nextAvailable) {
+    const option = document.createElement("option");
+    option.value = avatar.id;
+    option.textContent = avatar.name;
+    option.selected = avatar.id === selectedAvatarId;
+    select.appendChild(option);
+  }
+  select.value = selectedAvatarId;
+  select.addEventListener("change", () => {
+    selectedAvatarId = select.value;
+    renderAvatarChoices(nextAvailable);
+  }, { once: true });
+}
+
+function renderAvatarChoices(available = avatarChoices) {
+  const grid = document.querySelector("#avatarChoiceGrid");
+  if (!grid) return;
+  const nextAvailable = available.length ? available : avatarChoices;
+  if (!nextAvailable.some((avatar) => avatar.id === selectedAvatarId)) {
+    selectedAvatarId = nextAvailable[0].id;
+  }
+  grid.innerHTML = "";
+  for (const avatar of nextAvailable) {
+    const button = document.createElement("button");
+    const isSelected = avatar.id === selectedAvatarId;
+    button.className = `avatar-choice-button${isSelected ? " selected" : ""}`;
+    button.type = "button";
+    button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    button.innerHTML = `
+      <img src="${avatarImage(avatar.id)}" alt="" loading="lazy" />
+      <span>${avatar.name}</span>
+    `;
+    button.addEventListener("click", () => {
+      selectedAvatarId = avatar.id;
+      const select = document.querySelector("#createAvatarSelect");
+      if (select) select.value = selectedAvatarId;
+      renderAvatarChoices(nextAvailable);
+    });
+    grid.appendChild(button);
+  }
+}
+
+async function loadLobbyRooms() {
+  const status = document.querySelector("#roomListStatus");
+  if (status) status.textContent = "正在加载...";
+  try {
+    const response = await fetch("/api/rooms");
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "load rooms failed");
+    renderLobbyRooms(payload.rooms || []);
+  } catch (error) {
+    const list = document.querySelector("#roomList");
+    if (list) list.innerHTML = '<div class="room-card"><div><h3>房间加载失败</h3><p class="room-meta">请稍后刷新。</p></div></div>';
+    if (status) status.textContent = "加载失败";
+  }
+}
+
+function renderLobbyRooms(rooms) {
+  const list = document.querySelector("#roomList");
+  const status = document.querySelector("#roomListStatus");
+  if (!list) return;
+  list.innerHTML = "";
+  if (status) status.textContent = rooms.length ? `${rooms.length} 个可加入` : "暂无可加入房间";
+  if (!rooms.length) {
+    list.innerHTML = '<div class="room-card"><div><h3>暂无房间</h3><p class="room-meta">创建一个房间，朋友就能在这里看到。</p></div></div>';
+    return;
+  }
+  for (const item of rooms) {
+    const card = document.createElement("article");
+    card.className = "room-card";
+    card.innerHTML = `
+      <div>
+        <h3>${item.host_name || "玩家"}的房间</h3>
+        <p class="room-meta">${item.human_count}/9 真人 · AI 补位 ${item.ai_fill_count} · 房间号 ${item.room_id}</p>
+      </div>
+      <button class="primary-action" type="button">加入</button>
+    `;
+    card.querySelector("button").addEventListener("click", () => joinLobbyRoom(item.room_id));
+    list.appendChild(card);
+  }
+}
+
+async function createLobbyRoom() {
+  const name = document.querySelector("#createNameInput").value.trim() || DEFAULT_HUMAN_NAME;
+  const avatarId = selectedAvatarId;
+  await roomRequest("/api/rooms", { human_name: name, avatar_id: avatarId });
+}
+
+async function joinLobbyRoom(roomId) {
+  const name = document.querySelector("#createNameInput").value.trim() || DEFAULT_HUMAN_NAME;
+  const avatarId = selectedAvatarId;
+  await roomRequest(`/api/rooms/${roomId}/join`, { human_name: name, avatar_id: avatarId });
+}
+
+async function roomRequest(url, payload) {
+  showLobbyStatus("正在进入房间...");
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const nextRoom = await response.json();
+    if (!response.ok) throw new Error(nextRoom.detail || "room request failed");
+    room = nextRoom;
+    localPlayerId = nextRoom.human_id;
+    saveLocalSession(nextRoom);
+    renderWaitingRoom();
+    showScreen("waiting");
+    startRoomPolling();
+  } catch (error) {
+    showLobbyStatus(error.message || "进入房间失败");
+  }
+}
+
+async function applyRemoteRoom(nextRoom) {
+  const previousStage = currentStage;
+  room = nextRoom;
+  localPlayerId = nextRoom.human_id || localPlayerId;
+  if (nextRoom.status === "waiting") {
+    renderWaitingRoom();
+    showScreen("waiting");
+    return;
+  }
+  if (nextRoom.status === "playing") {
+    currentStage = room.stage;
+    if (previousStage !== currentStage) {
+      resetLocalStageState();
+    }
+    showScreen("game");
+    renderRoom();
+    scheduleCurrentAutoAdvance();
+  }
+}
+
+async function fetchRoomState() {
+  if (!room?.room_id || !localPlayerId || roomRequestInFlight) return;
+  const requestId = ++roomPollRequestId;
+  const viewerId = encodeURIComponent(localPlayerId);
+  try {
+    const response = await fetch(`/api/rooms/${room.room_id}?player_id=${viewerId}`);
+    const nextRoom = await response.json();
+    if (roomRequestInFlight || requestId !== roomPollRequestId) return;
+    if (response.status === 404) {
+      clearLocalSession();
+      stopRoomPolling();
+      room = null;
+      localPlayerId = null;
+      showScreen("lobby");
+      loadLobbyRooms();
+      return;
+    }
+    if (!response.ok) throw new Error(nextRoom.detail || "fetch room failed");
+    await applyRemoteRoom(nextRoom);
+  } catch (error) {
+    showWaitingStatus("同步房间状态失败，稍后重试...");
+  }
+}
+
+function startRoomPolling() {
+  stopRoomPolling();
+  roomPollTimer = setInterval(fetchRoomState, ROOM_POLL_INTERVAL_MS);
+}
+
+function stopRoomPolling() {
+  if (!roomPollTimer) return;
+  clearInterval(roomPollTimer);
+  roomPollTimer = null;
+}
+
+function renderWaitingRoom() {
+  if (!room || room.status !== "waiting") return;
+  document.querySelector("#waitingRoomTitle").textContent = `房间 ${room.room_id}`;
+  document.querySelector("#waitingRoomCode").textContent = room.room_id;
+  document.querySelector("#waitingRoomCount").textContent = `${room.human_count}/9 真人`;
+  document.querySelector("#waitingRoomAiCount").textContent = `AI 补位 ${room.ai_fill_count}`;
+  document.querySelector("#waitingHostStatus").textContent = localPlayerId === room.host_id ? "你是房主" : "等待房主开局";
+  const seats = document.querySelector("#waitingSeats");
+  seats.innerHTML = "";
+  const membersById = new Map((room.members || []).map((member) => [member.id, member]));
+  for (let seat = 1; seat <= 9; seat += 1) {
+    const member = membersById.get(String(seat));
+    const card = document.createElement("article");
+    card.className = `waiting-seat${member ? "" : " ai"}${member?.id === localPlayerId ? " mine" : ""}`;
+    card.innerHTML = member
+      ? `
+        <img class="waiting-seat-avatar" src="${avatarImage(member.avatar_id)}" alt="" loading="lazy" />
+        <strong>${seat}. ${member.name}${member.id === localPlayerId ? "（我）" : ""}</strong>
+        <span>${member.is_host ? "房主" : member.is_ready ? "已准备" : "未准备"}</span>
+      `
+      : `<strong>${seat}. AI 补位</strong><span>开局时自动加入</span>`;
+    seats.appendChild(card);
+  }
+  document.querySelector("#startRoomButton").classList.toggle("hidden", localPlayerId !== room.host_id);
+  populateAvatarSelect("#createAvatarSelect", room.available_avatars && room.available_avatars.length ? room.available_avatars : avatarChoices);
+  renderAvatarChoices(room.available_avatars && room.available_avatars.length ? room.available_avatars : avatarChoices);
+}
+
+async function copyWaitingRoomCode() {
+  if (!room?.room_id) return;
+  try {
+    await navigator.clipboard.writeText(room.room_id);
+    showWaitingStatus("房间码已复制");
+  } catch (error) {
+    showWaitingStatus(`房间码：${room.room_id}`);
+  }
+}
+
+async function toggleReady() {
+  if (!room || !localPlayerId) return;
+  await updateWaitingRoom(`/api/rooms/${room.room_id}/ready`, { player_id: localPlayerId });
+}
+
+async function startWaitingRoom() {
+  if (!room || !localPlayerId) return;
+  const nextRoom = await updateWaitingRoom(`/api/rooms/${room.room_id}/start`, { player_id: localPlayerId });
+  if (nextRoom && nextRoom.status === "playing") {
+    room = nextRoom;
+    currentStage = room.stage;
+    renderedSpeechKeys = new Set();
+    saveLocalSession(nextRoom);
+    showScreen("game");
+    renderRoom();
+  }
+}
+
+async function updateWaitingRoom(url, payload) {
+  showWaitingStatus("正在更新...");
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const nextRoom = await response.json();
+    if (!response.ok) throw new Error(nextRoom.detail || "update room failed");
+    room = nextRoom;
+    renderWaitingRoom();
+    showWaitingStatus("");
+    return nextRoom;
+  } catch (error) {
+    showWaitingStatus(error.message || "更新失败");
+    return null;
+  }
+}
+
+function avatarName(avatarId) {
+  return (avatarChoices.find((avatar) => avatar.id === avatarId) || {}).name || avatarId;
+}
+
+function avatarImage(avatarId) {
+  const avatar = avatarChoices.find((choice) => choice.id === avatarId);
+  if (!avatar || avatar.id === "human") return humanAvatar;
+  if (avatar.id === "garfield") return "/static/assets/avatars/garfield.png";
+  return `/static/assets/avatars/${avatar.id}.webp`;
+}
+
+function showScreen(name) {
+  document.querySelector("#lobbyScreen")?.classList.toggle("hidden", name !== "lobby");
+  document.querySelector("#waitingRoomScreen")?.classList.toggle("hidden", name !== "waiting");
+  document.querySelector("#startScreen")?.classList.toggle("hidden", name !== "start");
+  document.querySelector("#gameScreen")?.classList.toggle("hidden", name !== "game");
+}
+
+function showLobbyStatus(message) {
+  const status = document.querySelector("#lobbyStatus");
+  if (status) status.textContent = message;
+}
+
+function showWaitingStatus(message) {
+  const status = document.querySelector("#waitingStatus");
+  if (status) status.textContent = message;
+}
 
 function showNameModal() {
   if (room) return;
@@ -97,6 +462,7 @@ async function startGame() {
     if (!response.ok) throw new Error(nextRoom.detail || "create room failed");
 
     room = nextRoom;
+    localPlayerId = nextRoom.human_id;
     currentStage = room.stage;
     renderedSpeechKeys = new Set();
 
@@ -114,25 +480,36 @@ async function startGame() {
 
 async function nextStage() {
   const canAdvanceWinnerResult = room && room.winner && (currentStage === "night_result" || currentStage === "day_vote_result");
-  if (!room || room.waiting_for || (room.winner && !canAdvanceWinnerResult)) return;
+  if (!room || !canDriveRoom() || room.waiting_for || (room.winner && !canAdvanceWinnerResult)) return;
+  roomRequestInFlight = true;
+  roomPollRequestId += 1;
   setBusy(true);
   try {
-    const response = await fetch(`/api/rooms/${room.room_id}/next_stage`, { method: "POST" });
+    const query = localPlayerId ? `?player_id=${encodeURIComponent(localPlayerId)}` : "";
+    const response = await fetch(`/api/rooms/${room.room_id}/next_stage${query}`, { method: "POST" });
     const nextRoom = await response.json();
     if (!response.ok) throw new Error(nextRoom.detail || "next_stage failed");
     await applyRoom(nextRoom);
   } catch (error) {
     showLocalEvent("阶段推进失败，请稍后重试。");
   } finally {
+    roomRequestInFlight = false;
     setBusy(false);
   }
 }
 
 async function submitAction(payload) {
   if (!room || !room.waiting_for) return;
+  if (!isLocalPendingActor()) {
+    await fetchRoomState();
+    return;
+  }
+  roomRequestInFlight = true;
+  roomPollRequestId += 1;
   setBusy(true);
   try {
-    const response = await fetch(`/api/rooms/${room.room_id}/submit_action`, {
+    const query = localPlayerId ? `?player_id=${encodeURIComponent(localPlayerId)}` : "";
+    const response = await fetch(`/api/rooms/${room.room_id}/submit_action${query}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -143,6 +520,7 @@ async function submitAction(payload) {
   } catch (error) {
     showLocalEvent("提交失败，请重新选择。");
   } finally {
+    roomRequestInFlight = false;
     setBusy(false);
   }
 }
@@ -156,22 +534,7 @@ async function applyRoom(nextRoom, actionKind = null) {
     pendingSeerReveal = buildSeerReveal();
   }
   if (previousStage !== currentStage) {
-    pendingChoice = null;
-    if (!shouldShowSeerReveal) {
-      pendingSeerReveal = null;
-    }
-    witchActionFlow = null;
-    clearTimeout(discussionAdvanceTimer);
-    discussionAdvanceTimer = null;
-    clearTimeout(voteAdvanceTimer);
-    voteAdvanceTimer = null;
-    discussionPlaybackRunning = false;
-    votePlaybackRunning = false;
-    if (currentStage === "day_discussion") {
-      resetDiscussionFeed();
-    } else if (currentStage === "day_vote") {
-      resetVoteFeed();
-    }
+    resetLocalStageState({ keepSeerReveal: shouldShowSeerReveal });
     await transitionToStage(currentStage, renderRoom);
   } else {
     renderRoom();
@@ -182,17 +545,28 @@ async function applyRoom(nextRoom, actionKind = null) {
     return;
   }
 
+  scheduleCurrentAutoAdvance();
+}
+
+function resetLocalStageState(options = {}) {
+  pendingChoice = null;
+  if (!options.keepSeerReveal) {
+    pendingSeerReveal = null;
+  }
+  witchActionFlow = null;
+  clearTimeout(discussionAdvanceTimer);
+  discussionAdvanceTimer = null;
+  discussionAdvanceKey = null;
+  clearTimeout(voteAdvanceTimer);
+  voteAdvanceTimer = null;
+  voteAdvanceKey = null;
+  discussionPlaybackRunning = false;
+  votePlaybackRunning = false;
   if (currentStage === "day_discussion") {
-    scheduleDiscussionAutoAdvance();
-    return;
+    resetDiscussionFeed();
+  } else if (currentStage === "day_vote") {
+    resetVoteFeed();
   }
-
-  if (currentStage === "day_vote") {
-    scheduleVoteAutoAdvance();
-    return;
-  }
-
-  scheduleNightAutoAdvance();
 }
 
 async function transitionToStage(stage, renderFn) {
@@ -283,16 +657,17 @@ function renderPanels(displayStage = currentStage) {
 
   const waitingKind = room?.waiting_for?.kind || null;
   const canAdvanceWinnerResult = room?.winner && (displayStage === "night_result" || displayStage === "day_vote_result");
-  const canContinue = Boolean(room && !room.waiting_for && (!room.winner || canAdvanceWinnerResult));
-  const showVoteControls = waitingKind === "vote";
+  const canContinue = Boolean(room && canDriveRoom() && !room.waiting_for && (!room.winner || canAdvanceWinnerResult));
+  const showSpeechControls = waitingKind === "speech" && isLocalPendingActor();
+  const showVoteControls = waitingKind === "vote" && isLocalPendingActor();
 
   setVisible("#advanceButton", false);
   setVisible("#dawnNextButton", displayStage === "dawn");
   setVisible("#nightResultNextButton", displayStage === "night_result");
   setVisible("#discussionNextButton", displayStage === "day_discussion_done");
   setVisible("#voteResultNextButton", displayStage === "day_vote_result");
-  setVisible("#speechInput", waitingKind === "speech");
-  setVisible("#speechButton", waitingKind === "speech");
+  setVisible("#speechInput", showSpeechControls);
+  setVisible("#speechButton", showSpeechControls);
   setVisible("#voteTarget", showVoteControls);
   setVisible("#voteButton", showVoteControls);
 
@@ -303,7 +678,7 @@ function renderPanels(displayStage = currentStage) {
   document.querySelector("#discussionNextButton").disabled = !canContinue || discussionPlaybackRunning;
   const voteResultNextButton = document.querySelector("#voteResultNextButton");
   if (voteResultNextButton) voteResultNextButton.disabled = !canContinue;
-  document.querySelector("#speechButton").disabled = waitingKind !== "speech";
+  document.querySelector("#speechButton").disabled = !showSpeechControls;
   document.querySelector("#voteButton").disabled = !showVoteControls;
 
   document.querySelector("#wolfStatus").textContent = nightNarration("wolf_action");
@@ -336,8 +711,13 @@ function renderWaitingAction() {
     renderSeerReveal();
     return;
   }
-  if (!room.waiting_for) return;
+  if (!room.waiting_for) {
+    showWaitingStatus("");
+    return;
+  }
   const wait = room.waiting_for;
+  const isMine = isLocalPendingActor(wait);
+  showWaitingStatus(isMine ? "" : `等待 ${pendingActorLabel(wait)} 操作...`);
   if (wait.kind === "speech") {
     renderPlayers(wait.speaker_id || room.human_id);
     showLocalEvent(`轮到 ${wait.speaker_name || "你"} 发言。发言完毕后点击“我发言完毕”。`);
@@ -347,6 +727,7 @@ function renderWaitingAction() {
     const target = document.querySelector("#voteTarget");
     if (target) target.focus();
   }
+  if (!isMine) return;
   if (pendingChoice && pendingChoice.kind !== "witch_action") {
     renderChoiceConfirmation(wait);
     return;
@@ -374,6 +755,32 @@ function renderTargetChoices(selector, kind, candidates, roleName) {
     button.addEventListener("click", () => chooseWithConfirm(kind, candidate));
     grid.appendChild(button);
   }
+}
+
+function isLocalPendingActor(wait = room?.waiting_for) {
+  if (!wait || !localPlayerId) return false;
+  if (wait.kind === "speech") return wait.speaker_id === localPlayerId;
+  if (wait.kind === "vote") return wait.voter_id === localPlayerId;
+  const roleByKind = {
+    wolf_kill: "werewolf",
+    seer_check: "seer",
+    witch_action: "witch",
+    hunter_shot: "hunter",
+  };
+  return room?.human_role === roleByKind[wait.kind];
+}
+
+function pendingActorLabel(wait = room?.waiting_for) {
+  if (!wait) return "其他玩家";
+  if (wait.speaker_id) return `${wait.speaker_id} 号 ${wait.speaker_name || "玩家"}`;
+  if (wait.voter_id) return `${wait.voter_id} 号 ${wait.voter_name || "玩家"}`;
+  const roleLabels = {
+    wolf_kill: "狼人",
+    seer_check: "预言家",
+    witch_action: "女巫",
+    hunter_shot: "猎人",
+  };
+  return roleLabels[wait.kind] || "其他玩家";
 }
 
 function renderWitchChoices(wait) {
@@ -602,7 +1009,7 @@ function renderPlayers(activeSpeakerId = null) {
     }
 
     const name = document.createElement("strong");
-    name.textContent = `${player.id}. ${player.name}${player.is_human ? "（你）" : ""}`;
+    name.textContent = `${player.id}. ${player.name}${player.id === room.human_id ? "（你）" : ""}`;
     const role = document.createElement("span");
     role.textContent = roleLabel;
     const status = document.createElement("span");
@@ -620,6 +1027,7 @@ function visiblePlayerRole(player) {
 
 function renderVoteTargets() {
   const select = document.querySelector("#voteTarget");
+  const selectedTargetId = select.value;
   select.innerHTML = "";
   for (const player of room.players) {
     if (!player.is_alive || player.id === room.human_id) continue;
@@ -627,6 +1035,9 @@ function renderVoteTargets() {
     option.value = player.id;
     option.textContent = `${player.id}. ${player.name}`;
     select.appendChild(option);
+  }
+  if (selectedTargetId && select.querySelector(`option[value="${CSS.escape(selectedTargetId)}"]`)) {
+    select.value = selectedTargetId;
   }
 }
 
@@ -703,9 +1114,13 @@ function getActivePlayerId(displayStage = currentStage) {
 }
 
 function scheduleDiscussionAutoAdvance() {
-  clearTimeout(discussionAdvanceTimer);
   clearTimeout(voteAdvanceTimer);
-  if (!room || room.winner || pendingSeerReveal || currentStage !== "day_discussion" || room.waiting_for) {
+  voteAdvanceTimer = null;
+  voteAdvanceKey = null;
+  if (!room || !canDriveRoom() || room.winner || pendingSeerReveal || currentStage !== "day_discussion" || room.waiting_for) {
+    clearTimeout(discussionAdvanceTimer);
+    discussionAdvanceTimer = null;
+    discussionAdvanceKey = null;
     discussionPlaybackRunning = false;
     return;
   }
@@ -715,8 +1130,14 @@ function scheduleDiscussionAutoAdvance() {
     renderFirstDiscussionWaitPrompt();
   }
   const delay = latestSpeech ? discussionDelayFromText(latestSpeech.content) : 700;
+  const advanceKey = `${currentStage}:${room.day}:${speeches.length}:${latestSpeech ? speechKey(latestSpeech) : "none"}`;
+  if (discussionAdvanceTimer && discussionAdvanceKey === advanceKey) return;
+  clearTimeout(discussionAdvanceTimer);
+  discussionAdvanceKey = advanceKey;
   discussionPlaybackRunning = true;
   discussionAdvanceTimer = setTimeout(() => {
+    discussionAdvanceTimer = null;
+    discussionAdvanceKey = null;
     if (!room || room.winner || pendingSeerReveal || currentStage !== room.stage || currentStage !== "day_discussion" || room.waiting_for) return;
     nextStage();
   }, delay);
@@ -729,19 +1150,55 @@ function renderFirstDiscussionWaitPrompt() {
 }
 
 function scheduleVoteAutoAdvance() {
-  clearTimeout(voteAdvanceTimer);
   clearTimeout(discussionAdvanceTimer);
-  if (!room || room.winner || pendingSeerReveal || currentStage !== "day_vote" || room.waiting_for) {
+  discussionAdvanceTimer = null;
+  discussionAdvanceKey = null;
+  if (!room || !canDriveRoom() || room.winner || pendingSeerReveal || currentStage !== "day_vote" || room.waiting_for) {
+    clearTimeout(voteAdvanceTimer);
+    voteAdvanceTimer = null;
+    voteAdvanceKey = null;
     votePlaybackRunning = false;
     return;
   }
   const votes = orderedVotes(room.votes || []).filter((vote) => vote.day === room.day);
   const delay = votes.length ? 450 : 250;
+  const latestVote = votes[votes.length - 1] || null;
+  const advanceKey = `${currentStage}:${room.day}:${votes.length}:${latestVote ? voteKey(latestVote) : "none"}`;
+  if (voteAdvanceTimer && voteAdvanceKey === advanceKey) return;
+  clearTimeout(voteAdvanceTimer);
+  voteAdvanceKey = advanceKey;
   votePlaybackRunning = true;
   voteAdvanceTimer = setTimeout(() => {
+    voteAdvanceTimer = null;
+    voteAdvanceKey = null;
     if (!room || room.winner || pendingSeerReveal || currentStage !== room.stage || currentStage !== "day_vote" || room.waiting_for) return;
     nextStage();
   }, delay);
+}
+
+function scheduleCurrentAutoAdvance() {
+  const nightAutoStages = ["night_start", "wolf_action", "seer_action", "witch_action", "hunter_shot"];
+  if (nightAutoStages.includes(currentStage)) {
+    scheduleNightAutoAdvance();
+    return;
+  }
+  if (currentStage === "day_discussion") {
+    scheduleDiscussionAutoAdvance();
+    return;
+  }
+  if (currentStage === "day_vote") {
+    scheduleVoteAutoAdvance();
+    return;
+  }
+  clearTimeout(autoAdvanceTimer);
+  autoAdvanceTimer = null;
+  autoAdvanceStage = null;
+  clearTimeout(discussionAdvanceTimer);
+  discussionAdvanceTimer = null;
+  discussionAdvanceKey = null;
+  clearTimeout(voteAdvanceTimer);
+  voteAdvanceTimer = null;
+  voteAdvanceKey = null;
 }
 
 function discussionDelayFromText(text) {
@@ -831,7 +1288,7 @@ function getPlayer(playerId) {
 }
 
 function avatarForPlayer(player) {
-  if (player.is_human) return humanAvatar;
+  if (player.avatar_id) return avatarImage(player.avatar_id);
   return playerAvatarMap[player.name] || null;
 }
 
@@ -871,12 +1328,25 @@ function nightNarration(stage) {
 }
 
 function scheduleNightAutoAdvance() {
-  clearTimeout(autoAdvanceTimer);
   clearTimeout(discussionAdvanceTimer);
+  discussionAdvanceTimer = null;
+  discussionAdvanceKey = null;
   clearTimeout(voteAdvanceTimer);
+  voteAdvanceTimer = null;
+  voteAdvanceKey = null;
   const autoStages = ["night_start", "wolf_action", "seer_action", "witch_action", "hunter_shot"];
-  if (!room || room.waiting_for || room.winner || pendingSeerReveal || !autoStages.includes(currentStage)) return;
+  if (!room || !canDriveRoom() || room.waiting_for || room.winner || pendingSeerReveal || !autoStages.includes(currentStage)) {
+    clearTimeout(autoAdvanceTimer);
+    autoAdvanceTimer = null;
+    autoAdvanceStage = null;
+    return;
+  }
+  if (autoAdvanceTimer && autoAdvanceStage === currentStage) return;
+  clearTimeout(autoAdvanceTimer);
+  autoAdvanceStage = currentStage;
   autoAdvanceTimer = setTimeout(() => {
+    autoAdvanceTimer = null;
+    autoAdvanceStage = null;
     if (!room || room.waiting_for || room.winner || pendingSeerReveal || currentStage !== room.stage) return;
     nextStage();
   }, 1600);
@@ -886,6 +1356,10 @@ function setVisible(selector, visible) {
   const node = document.querySelector(selector);
   if (!node) return;
   node.classList.toggle("hidden", !visible);
+}
+
+function canDriveRoom() {
+  return Boolean(room && localPlayerId && localPlayerId === room.host_id);
 }
 
 function setBusy(isBusy) {
@@ -958,15 +1432,17 @@ if (poster) {
   }
 }
 
+initializeLobby();
+
 document.querySelector("#startButton").addEventListener("click", showNameModal);
 document.querySelector("#confirmNameButton").addEventListener("click", startGame);
 document.querySelector("#cancelNameButton").addEventListener("click", hideNameModal);
-document.querySelector("#confirmRoleButton").addEventListener("click", showRoleModal);
-document.querySelector("#closeRoleModalButton").addEventListener("click", closeRoleModal);
-document.querySelector("#advanceButton").addEventListener("click", nextStage);
-document.querySelector("#dawnNextButton").addEventListener("click", nextStage);
+document.querySelector("#confirmRoleButton")?.addEventListener("click", showRoleModal);
+document.querySelector("#closeRoleModalButton")?.addEventListener("click", closeRoleModal);
+document.querySelector("#advanceButton")?.addEventListener("click", nextStage);
+document.querySelector("#dawnNextButton")?.addEventListener("click", nextStage);
 document.querySelector("#nightResultNextButton")?.addEventListener("click", nextStage);
-document.querySelector("#discussionNextButton").addEventListener("click", nextStage);
+document.querySelector("#discussionNextButton")?.addEventListener("click", nextStage);
 document.querySelector("#voteResultNextButton")?.addEventListener("click", nextStage);
-document.querySelector("#speechButton").addEventListener("click", submitSpeech);
-document.querySelector("#voteButton").addEventListener("click", submitVote);
+document.querySelector("#speechButton")?.addEventListener("click", submitSpeech);
+document.querySelector("#voteButton")?.addEventListener("click", submitVote);

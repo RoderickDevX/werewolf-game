@@ -1,0 +1,15 @@
+.git
+.pytest_cache
+.venv
+__pycache__
+*.py[cod]
+*.egg-info
+server.*.log
+server.pid
+.env
+docs
+tests
+.superpowers
+outputs
+source.png
+lazy_yangyang_replaced.png

@@ -58,6 +58,7 @@ class Player:
     role: Role
     is_human: bool = False
     is_alive: bool = True
+    avatar_id: Optional[str] = None
 
     @property
     def camp(self) -> Camp:
@@ -228,6 +229,7 @@ def set_players_alive(players: list[Player], dead_player_ids: Set[str]) -> list[
             role=player.role,
             is_human=player.is_human,
             is_alive=False if player.id in dead_player_ids else player.is_alive,
+            avatar_id=player.avatar_id,
         )
         for player in players
     ]

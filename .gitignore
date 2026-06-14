@@ -4,5 +4,11 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
 server.*.log
 server.pid
+outputs/
+.superpowers/brainstorm/*/server-info
+.superpowers/brainstorm/*/*.log
+.superpowers/brainstorm/*/*.html

@@ -35,11 +35,16 @@ Completed:
 Install dependencies:
 
 ```powershell
+python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 pip install -e .
 ```
 
 Configure `.env`:
+
+```powershell
+cp .env.example .env
+```
 
 ```env
 DEEPSEEK_API_KEY=your DeepSeek API key
@@ -59,13 +64,29 @@ Open:
 http://127.0.0.1:8000
 ```
 
-## Deploy With a Domain
+## Test
 
-If you want others to visit the game through `roderickdev.cn`, run the app on the server and put a reverse proxy in front of it.
+Install development dependencies:
+
+```powershell
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements-dev.txt
+pip install -e .
+```
+
+Run the test suite:
+
+```powershell
+pytest -q
+```
+
+## Deploy With 1Panel
+
+If you want others to visit the game through `werewolf.roderickdev.cn`, run the app on the server and put a reverse proxy in front of it. See `docs/1panel-deploy.md` for the full 1Panel setup.
 
 Recommended setup:
 
-1. Run the app on localhost:
+1. Run the app on localhost or in Docker:
 
 ```powershell
 python -m werewolf_langgraph --host 127.0.0.1 --port 8000
@@ -76,7 +97,7 @@ python -m werewolf_langgraph --host 127.0.0.1 --port 8000
 ```nginx
 server {
     listen 80;
-    server_name roderickdev.cn www.roderickdev.cn;
+    server_name werewolf.roderickdev.cn;
 
     location / {
         proxy_pass http://127.0.0.1:8000;
@@ -91,7 +112,7 @@ server {
 }
 ```
 
-With DNS already set to the server, opening `https://roderickdev.cn` will reach this game after you reload Nginx and add HTTPS.
+With DNS already set to the server, opening `https://werewolf.roderickdev.cn` will reach this game after you reload Nginx and add HTTPS.
 
 ## Files
 
@@ -107,4 +128,4 @@ With DNS already set to the server, opening `https://roderickdev.cn` will reach 
 
 The page can create a room, show your role, submit speech, submit vote, and run the LangGraph backend.
 
-Night actions for a human special role are not yet paused for browser input. If your role is werewolf, seer, or witch, the current graph skips your night action. The next refinement should add LangGraph pause/resume points for human night actions.
+Human werewolf, seer, witch, and hunter actions pause for browser input. Rooms are stored in memory, so active rooms disappear when the server restarts; use a persistent store before treating multiplayer rooms as production durable.

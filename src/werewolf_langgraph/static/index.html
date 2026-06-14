@@ -11,7 +11,84 @@
     <div id="fogTransition" class="fog-transition" aria-hidden="true"></div>
 
     <main>
-      <section id="startScreen" class="start-screen">
+      <section id="lobbyScreen" class="lobby-screen">
+        <header class="mobile-lobby-topbar">
+          <div>
+            <p class="eyebrow">联机大厅</p>
+            <h1>卡通狼人杀</h1>
+          </div>
+          <button id="refreshRoomsButton" class="secondary-action" type="button" aria-label="刷新房间">刷新</button>
+        </header>
+
+        <div class="lobby-hero">
+          <div>
+            <p class="eyebrow">手机联机</p>
+            <h2>选好身份，马上进房</h2>
+            <p>1 到 9 个真人都能开局，空位由 AI 自动补齐。</p>
+          </div>
+        </div>
+
+        <section class="lobby-layout">
+          <article class="lobby-panel lobby-create-panel">
+            <div class="lobby-panel-head">
+              <h2>玩家设置</h2>
+            </div>
+            <label class="lobby-field" for="createNameInput">
+              <span>昵称</span>
+              <input id="createNameInput" maxlength="16" autocomplete="nickname" placeholder="打摆子的家伙" />
+            </label>
+            <label class="lobby-field lobby-select-fallback" for="createAvatarSelect">
+              <span>角色形象</span>
+              <select id="createAvatarSelect"></select>
+            </label>
+            <div id="avatarChoiceGrid" class="avatar-choice-grid" aria-label="选择头像"></div>
+            <button id="createRoomButton" class="primary-action" type="button">创建房间</button>
+            <p id="lobbyStatus" class="start-status" role="status" aria-live="polite"></p>
+          </article>
+
+          <article class="lobby-panel lobby-room-panel">
+            <div class="lobby-panel-head">
+              <h2>可加入房间</h2>
+              <span id="roomListStatus" class="lobby-status">正在加载...</span>
+            </div>
+            <div id="roomList" class="room-list"></div>
+          </article>
+        </section>
+      </section>
+
+      <section id="waitingRoomScreen" class="waiting-room-screen hidden">
+        <header class="waiting-room-header">
+          <div>
+            <p class="eyebrow">等待房间</p>
+            <h2 id="waitingRoomTitle">房间</h2>
+          </div>
+          <div class="waiting-room-code-card">
+            <span>房间码</span>
+            <strong id="waitingRoomCode">----</strong>
+            <button id="copyRoomCodeButton" class="secondary-action" type="button">复制</button>
+          </div>
+        </header>
+        <div class="waiting-status-row">
+          <span id="waitingRoomCount">0/9 真人</span>
+          <span id="waitingRoomAiCount">AI 补位 9</span>
+          <span id="waitingHostStatus">等待房主开局</span>
+        </div>
+        <section class="waiting-seat-panel">
+          <div class="lobby-panel-head">
+            <h2>座位</h2>
+            <span>满 9 人开局，不足由 AI 补齐</span>
+          </div>
+          <section id="waitingSeats" class="waiting-seats waiting-seat-grid"></section>
+        </section>
+        <section class="waiting-actions mobile-bottom-actions">
+          <button id="backToLobbyButton" class="secondary-action" type="button">返回大厅</button>
+          <button id="readyButton" class="secondary-action" type="button">准备</button>
+          <button id="startRoomButton" class="primary-action" type="button">开始游戏</button>
+          <p id="waitingStatus" class="start-status" role="status" aria-live="polite"></p>
+        </section>
+      </section>
+
+      <section id="startScreen" class="start-screen hidden">
         <div class="start-content poster-loading">
           <div id="posterLoading" class="poster-loading-panel" role="status" aria-live="polite">
             <span>正在加载开场海报...</span>
@@ -30,22 +107,26 @@
       </section>
 
       <section id="gameScreen" class="game-screen hidden">
-        <header class="game-header">
-          <div>
-            <p id="phaseEyebrow" class="eyebrow">准备</p>
-            <h2 id="phaseTitle">等待夜幕降临</h2>
-          </div>
-          <div class="round-info">
-            <span id="roundInfo">第 1 天</span>
-            <span id="seatInfo">座位 -</span>
-          </div>
-        </header>
+        <div class="desktop-table-shell">
+          <header class="game-header desktop-top-bar">
+            <div>
+              <p id="phaseEyebrow" class="eyebrow">准备</p>
+              <h2 id="phaseTitle">等待夜幕降临</h2>
+            </div>
+            <div class="round-info">
+              <span id="roundInfo">第 1 天</span>
+              <span id="seatInfo">座位 -</span>
+            </div>
+          </header>
 
-        <section class="table-area">
-          <div id="players" class="players"></div>
-        </section>
+          <aside id="desktopPlayerRail" class="desktop-player-rail">
+            <section class="table-area">
+              <div id="players" class="players"></div>
+            </section>
+          </aside>
 
-        <section class="phase-stage">
+          <section id="desktopActionColumn" class="desktop-action-column">
+            <section class="phase-stage desktop-action-dock">
           <article id="phaseSetup" class="phase-panel active">
             <p class="phase-mark">序章</p>
             <h3>房间已创建</h3>
@@ -133,12 +214,17 @@
             <h3 id="winnerTitle">游戏结束</h3>
             <p id="winnerText">胜负已揭晓。</p>
           </article>
-        </section>
+            </section>
 
-        <section class="event-log">
-          <h3>公开记录</h3>
-          <div id="events"></div>
-        </section>
+          </section>
+
+          <aside id="desktopInfoRail" class="desktop-info-rail">
+            <section class="event-log">
+              <h3>公开记录</h3>
+              <div id="events"></div>
+            </section>
+          </aside>
+        </div>
       </section>
     </main>
 
@@ -181,6 +267,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=20260524-final-result-step"></script>
+    <script src="/static/app.js?v=20260603-multiplayer-lobby-final-result-step"></script>
   </body>
 </html>

@@ -48,6 +48,15 @@ def test_start_game_does_not_show_role_modal_automatically():
     assert "showRoleModal()" not in start_game_source
 
 
+def test_single_player_start_sets_local_player_id_for_auto_advance():
+    source = APP_JS.read_text(encoding="utf-8")
+    start_index = source.index("async function startGame()")
+    next_function_index = source.index("async function nextStage()", start_index)
+    start_game_source = source[start_index:next_function_index]
+
+    assert "localPlayerId = nextRoom.human_id;" in start_game_source
+
+
 def test_setup_button_asks_player_to_view_role_first():
     index_html = APP_JS.with_name("index.html").read_text(encoding="utf-8")
 
@@ -59,6 +68,8 @@ def test_night_start_auto_advances_without_manual_wolf_button():
 
     assert 'const autoStages = ["night_start", "wolf_action", "seer_action", "witch_action", "hunter_shot"];' in source
     assert 'setVisible("#advanceButton", false);' in source
+    assert "let autoAdvanceStage = null;" in source
+    assert "if (autoAdvanceTimer && autoAdvanceStage === currentStage) return;" in source
 
 
 def test_human_night_role_still_advances_until_waiting_for_input():
@@ -130,7 +141,8 @@ def test_seer_reveal_waits_for_acknowledgement():
     assert "我已知晓" in index_html
     assert "scheduleNightAutoAdvance();" in seer_reveal_source
     assert "const shouldShowSeerReveal =" in apply_room_source
-    assert "if (!shouldShowSeerReveal) {" in apply_room_source
+    assert "resetLocalStageState({ keepSeerReveal: shouldShowSeerReveal });" in apply_room_source
+    assert "if (!options.keepSeerReveal) {" in apply_room_source
 
 
 def test_set_busy_restores_modal_interaction():
@@ -204,6 +216,8 @@ def test_day_discussion_advances_live_instead_of_replay_after_completion():
     assert "playSequentialDiscussion" not in source
     assert 'if (currentStage === "day_discussion") {' in source
     assert "scheduleDiscussionAutoAdvance();" in source
+    assert "let discussionAdvanceKey = null;" in source
+    assert "if (discussionAdvanceTimer && discussionAdvanceKey === advanceKey) return;" in source
 
 
 def test_first_discussion_wait_shows_thinking_prompt():
@@ -225,6 +239,17 @@ def test_discussion_done_button_is_not_blocked_by_old_playback_flag():
     assert 'setVisible("#discussionNextButton", displayStage === "day_discussion_done");' in source
 
 
+def test_remote_stage_change_clears_local_pending_state_like_local_apply():
+    source = APP_JS.read_text(encoding="utf-8")
+    remote_start = source.index("async function applyRemoteRoom(nextRoom)")
+    remote_end = source.index("async function fetchRoomState()", remote_start)
+    apply_remote_source = source[remote_start:remote_end]
+
+    assert "const previousStage = currentStage;" in apply_remote_source
+    assert "resetLocalStageState();" in apply_remote_source
+    assert "if (previousStage !== currentStage)" in apply_remote_source
+
+
 def test_human_speech_finish_can_submit_empty_text():
     source = APP_JS.read_text(encoding="utf-8")
     start_index = source.index("async function submitSpeech()")
@@ -241,9 +266,20 @@ def test_vote_controls_only_show_when_waiting_for_human_vote():
     render_end = source.index("document.querySelector(\"#wolfStatus\").textContent", render_start)
     render_source = source[render_start:render_end]
 
-    assert 'const showVoteControls = waitingKind === "vote";' in render_source
+    assert 'const showVoteControls = waitingKind === "vote" && isLocalPendingActor();' in render_source
     assert 'setVisible("#voteTarget", showVoteControls);' in render_source
     assert 'setVisible("#voteButton", showVoteControls);' in render_source
+
+
+def test_vote_target_selection_survives_room_rerender():
+    source = APP_JS.read_text(encoding="utf-8")
+    start_index = source.index("function renderVoteTargets()")
+    end_index = source.index("function renderEvents()", start_index)
+    render_vote_targets_source = source[start_index:end_index]
+
+    assert "const selectedTargetId = select.value;" in render_vote_targets_source
+    assert "if (selectedTargetId && select.querySelector" in render_vote_targets_source
+    assert "select.value = selectedTargetId;" in render_vote_targets_source
 
 
 def test_vote_feed_and_auto_advance_exist():
@@ -254,6 +290,8 @@ def test_vote_feed_and_auto_advance_exist():
     assert "function appendVoteBubble(vote, voter, target)" in source
     assert 'if (currentStage === "day_vote") {' in source
     assert "scheduleVoteAutoAdvance();" in source
+    assert "let voteAdvanceKey = null;" in source
+    assert "if (voteAdvanceTimer && voteAdvanceKey === advanceKey) return;" in source
 
 
 def test_vote_result_screen_and_continue_button_exist():
@@ -352,11 +390,11 @@ def test_opening_poster_waits_for_image_load_before_showing_controls():
 
 def test_game_screen_uses_separate_cartoon_background():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
-    asset = APP_JS.with_name("assets") / "game-cartoon-background.webp"
+    asset = APP_JS.with_name("assets") / "game-mobile-character-background.png"
 
     assert asset.exists()
     assert ".game-screen::before" in css
-    assert 'url("/static/assets/game-cartoon-background.webp")' in css
+    assert 'url("/static/assets/game-mobile-character-background.png")' in css
     assert "filter: saturate(1.08);" in css
     assert "background: rgba(13, 17, 26, 0.52);" in css
     assert "backdrop-filter: blur(6px);" in css
@@ -382,7 +420,9 @@ def test_player_avatar_mapping_and_rendering_exist():
     assert "const playerAvatarMap = {" in source
     assert "function avatarForPlayer(player)" in source
     assert 'const humanAvatar = "/static/assets/avatars/human.webp";' in source
-    assert "if (player.is_human) return humanAvatar;" in source
+    assert "if (player.avatar_id) return avatarImage(player.avatar_id);" in source
+    assert "if (player.is_human) return humanAvatar;" not in source
+    assert '"加菲猫": "/static/assets/avatars/garfield.png",' in source
     assert 'avatar.className = "player-avatar";' in source
     assert "avatar.alt = `${player.name}头像`;" in source
     assert ".player-avatar" in css
@@ -401,5 +441,223 @@ def test_player_avatar_assets_exist():
         "lazy-yangyang.webp",
         "nailong.webp",
         "human.webp",
+        "garfield.png",
     ]:
         assert (avatar_dir / filename).exists()
+
+
+def test_multiplayer_avatar_choice_replaces_default_human_with_garfield():
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert '{ id: "garfield", name: "加菲猫" }' in source
+    assert '{ id: "human", name: "默认玩家" }' not in source
+    assert 'if (avatar.id === "garfield") return "/static/assets/avatars/garfield.png";' in source
+    assert 'const humanAvatar = "/static/assets/avatars/human.webp";' in source
+
+
+def test_mobile_lobby_avatar_grid_and_waiting_room_helpers_exist():
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert "let selectedAvatarId = avatarChoices[0].id;" in source
+    assert "function renderAvatarChoices" in source
+    assert "avatar-choice-button" in source
+    assert 'document.querySelector("#avatarChoiceGrid")' in source
+    assert 'document.querySelector("#copyRoomCodeButton")?.addEventListener("click", copyWaitingRoomCode);' in source
+    assert "async function copyWaitingRoomCode()" in source
+    assert 'document.querySelector("#waitingRoomCode").textContent = room.room_id;' in source
+    assert 'document.querySelector("#waitingHostStatus").textContent' in source
+    assert "waiting-seat-avatar" in source
+
+
+def test_multiplayer_session_helpers_exist():
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert 'const LOCAL_SESSION_KEY = "werewolf.roomSession";' in source
+    assert "function saveLocalSession(nextRoom)" in source
+    assert "function restoreLocalSession()" in source
+    assert "function clearLocalSession()" in source
+    assert "localStorage.setItem(LOCAL_SESSION_KEY" in source
+    assert "localStorage.getItem(LOCAL_SESSION_KEY)" in source
+    assert "localStorage.removeItem(LOCAL_SESSION_KEY)" in source
+    assert "new URLSearchParams(window.location.search)" in source
+
+
+def test_room_request_saves_session_and_starts_polling():
+    source = APP_JS.read_text(encoding="utf-8")
+    start_index = source.index("async function roomRequest(url, payload)")
+    end_index = source.index("function renderWaitingRoom()", start_index)
+    room_request_source = source[start_index:end_index]
+
+    assert "saveLocalSession(nextRoom);" in room_request_source
+    assert "startRoomPolling();" in room_request_source
+
+
+def test_room_polling_uses_viewer_specific_room_endpoint():
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert "let roomPollTimer = null;" in source
+    assert "const ROOM_POLL_INTERVAL_MS = 1500;" in source
+    assert "function startRoomPolling()" in source
+    assert "function stopRoomPolling()" in source
+    assert "async function fetchRoomState()" in source
+    assert "setInterval(fetchRoomState, ROOM_POLL_INTERVAL_MS)" in source
+    assert "encodeURIComponent(localPlayerId)" in source
+    assert "fetch(`/api/rooms/${room.room_id}?player_id=${viewerId}`)" in source
+    assert "if (roomRequestInFlight || requestId !== roomPollRequestId) return;" in source
+
+
+def test_waiting_poll_switches_to_game_after_host_start():
+    source = APP_JS.read_text(encoding="utf-8")
+    start_index = source.index("async function applyRemoteRoom(nextRoom)")
+    end_index = source.index("async function fetchRoomState()", start_index)
+    apply_remote_source = source[start_index:end_index]
+
+    assert 'if (nextRoom.status === "waiting") {' in apply_remote_source
+    assert 'showScreen("waiting");' in apply_remote_source
+    assert 'if (nextRoom.status === "playing") {' in apply_remote_source
+    assert 'showScreen("game");' in apply_remote_source
+    assert "renderRoom();" in apply_remote_source
+    assert "scheduleCurrentAutoAdvance();" in apply_remote_source
+
+
+def test_remote_poll_only_schedules_current_auto_advance():
+    source = APP_JS.read_text(encoding="utf-8")
+    start_index = source.index("async function applyRemoteRoom(nextRoom)")
+    end_index = source.index("async function fetchRoomState()", start_index)
+    apply_remote_source = source[start_index:end_index]
+
+    assert "function scheduleCurrentAutoAdvance()" in source
+    assert "scheduleNightAutoAdvance();\n    scheduleDiscussionAutoAdvance();\n    scheduleVoteAutoAdvance();" not in apply_remote_source
+
+
+def test_room_posts_invalidate_in_flight_poll_responses():
+    source = APP_JS.read_text(encoding="utf-8")
+    next_start = source.index("async function nextStage()")
+    next_end = source.index("async function submitAction(payload)", next_start)
+    next_stage_source = source[next_start:next_end]
+    submit_start = next_end
+    submit_end = source.index("async function applyRoom", submit_start)
+    submit_action_source = source[submit_start:submit_end]
+
+    assert "roomPollRequestId += 1;" in next_stage_source
+    assert "roomPollRequestId += 1;" in submit_action_source
+
+
+def test_only_local_player_is_marked_you():
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert 'player.id === room.human_id ? "（你）" : ""' in source
+    assert 'player.is_human ? "（你）" : ""' not in source
+
+
+def test_pending_actions_are_gated_to_local_actor():
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert "function isLocalPendingActor(wait = room?.waiting_for)" in source
+    assert "function pendingActorLabel(wait = room?.waiting_for)" in source
+    assert "const isMine = isLocalPendingActor(wait);" in source
+    assert 'showWaitingStatus(isMine ? "" : `等待 ${pendingActorLabel(wait)} 操作...`);' in source
+    assert 'const showVoteControls = waitingKind === "vote" && isLocalPendingActor();' in source
+
+
+def test_waiting_status_clears_when_no_action_is_pending():
+    source = APP_JS.read_text(encoding="utf-8")
+    start_index = source.index("function renderWaitingAction()")
+    end_index = source.index("function clearActionBoxes()", start_index)
+    render_waiting_source = source[start_index:end_index]
+
+    assert 'if (!room.waiting_for) {' in render_waiting_source
+    assert 'showWaitingStatus("");' in render_waiting_source
+
+
+def test_desktop_table_shell_structure_exists():
+    index_html = APP_JS.with_name("index.html").read_text(encoding="utf-8")
+
+    assert 'class="desktop-table-shell"' in index_html
+    assert 'id="desktopPlayerRail"' in index_html
+    assert 'id="desktopActionColumn"' in index_html
+    assert 'id="desktopInfoRail"' in index_html
+    assert "desktop-top-bar" in index_html
+    assert "desktop-action-dock" in index_html
+
+
+def test_desktop_table_css_uses_three_column_grid():
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+
+    assert ".desktop-table-shell" in css
+    assert "grid-template-areas:" in css
+    assert '"top top top"' in css
+    assert '"players stage log"' in css
+    assert "grid-area: players;" in css
+    assert "grid-area: stage;" in css
+    assert "grid-area: log;" in css
+    assert "@media (max-width: 1179px)" in css
+
+
+def test_desktop_player_roster_is_compact_sidebar():
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+
+    assert "#desktopPlayerRail .players" in css
+    assert "grid-template-columns: 1fr;" in css
+    assert "#desktopPlayerRail .player" in css
+    assert "grid-template-columns: 56px minmax(0, 1fr);" in css
+    assert "min-height: 72px;" in css
+
+
+def test_desktop_columns_scroll_without_clipping_content():
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+
+    assert "grid-template-rows: auto minmax(0, 1fr);" in css
+    assert "height: calc(100vh - 36px);" in css
+    assert ".desktop-action-dock" in css
+    assert "overflow: auto;" in css
+    assert ".phase-panel.active" in css
+    assert "min-height: 100%;" in css
+
+
+def test_mobile_game_phase_panel_is_translucent_enough_for_character_background():
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+
+    assert "@media (max-width: 680px)" in css
+    assert ".phase-stage," in css
+    assert "background: rgba(13, 17, 26, 0.34);" in css
+    assert "backdrop-filter: blur(2px);" in css
+
+
+def test_mobile_game_player_roster_is_translucent_enough_for_character_background():
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+
+    assert "@media (max-width: 680px)" in css
+    assert ".table-area {" in css
+    assert ".player {" in css
+    assert "background: rgba(13, 17, 26, 0.28);" in css
+    assert "background: rgba(255, 255, 255, 0.035);" in css
+
+
+def test_mobile_game_layout_allows_setup_action_to_be_reached():
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+
+    assert "@media (max-width: 680px)" in css
+    assert '"top"' in css
+    assert '"stage"' in css
+    assert '"players"' in css
+    assert '"log"' in css
+    assert ".desktop-table-shell {" in css
+    assert "height: auto;" in css
+    assert "min-height: 0;" in css
+    assert ".desktop-action-dock {" in css
+    assert "min-height: auto;" in css
+    assert ".phase-panel.active {" in css
+    assert "align-content: start;" in css
+
+
+def test_desktop_visible_chinese_text_is_not_mojibake():
+    index_html = APP_JS.with_name("index.html").read_text(encoding="utf-8")
+
+    assert "<title>卡通狼人杀</title>" in index_html
+    assert "联机大厅" in index_html
+    assert "创建房间" in index_html
+    assert "等待房间" in index_html
+    assert "公开记录" in index_html
+    assert "查看身份" in index_html
+    assert "鍗" not in index_html

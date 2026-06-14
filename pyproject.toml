@@ -22,3 +22,14 @@ werewolf-web = "werewolf_langgraph.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+werewolf_langgraph = [
+    "static/*.html",
+    "static/*.css",
+    "static/*.js",
+    "static/assets/*.png",
+    "static/assets/*.webp",
+    "static/assets/avatars/*.png",
+    "static/assets/avatars/*.webp",
+]

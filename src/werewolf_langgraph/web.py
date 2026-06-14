@@ -3,8 +3,9 @@ from __future__ import annotations
 import argparse
 import os
 import random
+import threading
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -33,6 +34,17 @@ from .state import (
 
 
 AI_NAMES = ["蜡笔小新", "懒羊羊", "猪猪侠", "柯南", "哆啦A梦", "小猪佩奇", "奶龙", "海绵宝宝"]
+AVATAR_CHOICES = [
+    {"id": "shinchan", "name": "Shinchan", "ai_name": AI_NAMES[0]},
+    {"id": "lazy-yangyang", "name": "Lazy Yangyang", "ai_name": AI_NAMES[1]},
+    {"id": "ggbond", "name": "GG Bond", "ai_name": AI_NAMES[2]},
+    {"id": "conan", "name": "Conan", "ai_name": AI_NAMES[3]},
+    {"id": "doraemon", "name": "Doraemon", "ai_name": AI_NAMES[4]},
+    {"id": "peppa", "name": "Peppa", "ai_name": AI_NAMES[5]},
+    {"id": "nailong", "name": "Nailong", "ai_name": AI_NAMES[6]},
+    {"id": "spongebob", "name": "Spongebob", "ai_name": AI_NAMES[7]},
+    {"id": "garfield", "name": "Garfield", "ai_name": "加菲猫"},
+]
 DEFAULT_ROLES = [
     Role.WEREWOLF,
     Role.WEREWOLF,
@@ -61,6 +73,16 @@ def _default_port() -> int:
 class CreateRoomRequest(BaseModel):
     human_name: str = "打摆子的家伙"
     human_seat: int = 1
+    avatar_id: Optional[str] = None
+
+
+class JoinRoomRequest(BaseModel):
+    human_name: str = "打摆子的家伙"
+    avatar_id: str
+
+
+class PlayerRoomRequest(BaseModel):
+    player_id: str
 
 
 class SubmitActionRequest(BaseModel):
@@ -71,13 +93,36 @@ class SubmitActionRequest(BaseModel):
     poison_target_id: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class RoomMember:
+    id: str
+    name: str
+    avatar_id: str
+    is_host: bool = False
+    is_ready: bool = False
+
+
 class Room:
-    def __init__(self, room_id: str, state: GraphState, human_id: str, graph: Any):
+    def __init__(
+        self,
+        room_id: str,
+        state: Optional[GraphState],
+        human_id: str,
+        graph: Any,
+        *,
+        host_id: Optional[str] = None,
+        members: Optional[list[RoomMember]] = None,
+        status: str = "playing",
+    ):
         self.room_id = room_id
         self.state = state
         self.human_id = human_id
         self.graph = graph
         self.waiting_for: Optional[dict[str, Any]] = None
+        self.status = status
+        self.host_id = host_id or human_id
+        self.members = members or []
+        self.lock = threading.Lock()
 
     @property
     def config(self) -> dict[str, Any]:
@@ -102,7 +147,8 @@ def create_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request) -> str:
         host = request.headers.get("host", "").split(":", maxsplit=1)[0].lower()
-        page = "index.html" if host.startswith("werewolf.") else "home.html"
+        local_hosts = {"127.0.0.1", "localhost", "::1"}
+        page = "index.html" if host.startswith("werewolf.") or host in local_hosts else "home.html"
         with open(STATIC_DIR / page, "r", encoding="utf-8") as file:
             return file.read()
 
@@ -110,6 +156,26 @@ def create_app() -> FastAPI:
     def create_room(payload: CreateRoomRequest) -> dict[str, Any]:
         if payload.human_seat < 1 or payload.human_seat > 9:
             raise HTTPException(status_code=400, detail="human_seat must be between 1 and 9.")
+
+        if payload.avatar_id:
+            member = RoomMember(
+                id="1",
+                name=payload.human_name.strip() or "Player",
+                avatar_id=_valid_avatar_id(payload.avatar_id),
+                is_host=True,
+            )
+            room_id = uuid.uuid4().hex[:8]
+            room = Room(
+                room_id,
+                None,
+                human_id=member.id,
+                graph=None,
+                host_id=member.id,
+                members=[member],
+                status="waiting",
+            )
+            ROOMS[room_id] = room
+            return _serialize_room(room)
 
         config = load_config()
         llm = create_deepseek_llm(config)
@@ -121,33 +187,104 @@ def create_app() -> FastAPI:
         ROOMS[room_id] = room
         return _serialize_room(room)
 
+    @app.get("/api/rooms")
+    def list_rooms() -> dict[str, Any]:
+        return {
+            "rooms": [
+                _serialize_lobby_room(room)
+                for room in ROOMS.values()
+                if room.status == "waiting" and len(room.members) < 9
+            ]
+        }
+
     @app.get("/api/rooms/{room_id}")
-    def get_room(room_id: str) -> dict[str, Any]:
-        return _serialize_room(_get_room(room_id))
+    def get_room(room_id: str, player_id: Optional[str] = None) -> dict[str, Any]:
+        return _serialize_room(_get_room(room_id), viewer_id=player_id)
+
+    @app.post("/api/rooms/{room_id}/join")
+    def join_room(room_id: str, payload: JoinRoomRequest) -> dict[str, Any]:
+        room = _get_room(room_id)
+        if room.status != "waiting":
+            raise HTTPException(status_code=400, detail="room already started.")
+        if len(room.members) >= 9:
+            raise HTTPException(status_code=400, detail="room is full.")
+
+        avatar_id = _valid_avatar_id(payload.avatar_id)
+        if avatar_id in {member.avatar_id for member in room.members}:
+            raise HTTPException(status_code=400, detail="avatar already taken.")
+
+        member = RoomMember(
+            id=_next_member_id(room.members),
+            name=payload.human_name.strip() or "Player",
+            avatar_id=avatar_id,
+        )
+        room.members = [*room.members, member]
+        room.human_id = member.id
+        return _serialize_room(room, viewer_id=member.id)
+
+    @app.post("/api/rooms/{room_id}/ready")
+    def set_ready(room_id: str, payload: PlayerRoomRequest) -> dict[str, Any]:
+        room = _get_room(room_id)
+        if room.status != "waiting":
+            raise HTTPException(status_code=400, detail="room already started.")
+        room.members = [
+            RoomMember(
+                id=member.id,
+                name=member.name,
+                avatar_id=member.avatar_id,
+                is_host=member.is_host,
+                is_ready=not member.is_ready if member.id == payload.player_id else member.is_ready,
+            )
+            for member in room.members
+        ]
+        return _serialize_room(room, viewer_id=payload.player_id)
+
+    @app.post("/api/rooms/{room_id}/start")
+    def start_room(room_id: str, payload: PlayerRoomRequest) -> dict[str, Any]:
+        room = _get_room(room_id)
+        if room.status != "waiting":
+            raise HTTPException(status_code=400, detail="room already started.")
+        if payload.player_id != room.host_id:
+            raise HTTPException(status_code=403, detail="only host can start the room.")
+
+        config = load_config()
+        llm = create_deepseek_llm(config)
+        graph = build_game_graph(llm)
+        players = _make_multiplayer_players(room.members)
+        room.graph = graph
+        room.state = state_to_graph_state(create_initial_state(players))
+        room.status = "playing"
+        room.human_id = payload.player_id
+        return _serialize_room(room, viewer_id=payload.player_id)
 
     @app.post("/api/rooms/{room_id}/next_stage")
-    def next_stage(room_id: str) -> dict[str, Any]:
+    def next_stage(room_id: str, player_id: Optional[str] = None) -> dict[str, Any]:
         room = _get_room(room_id)
-        if room.waiting_for:
-            return _serialize_room(room)
-        if room.state["winner"] and room.state["stage"] not in {Stage.NIGHT_RESULT, Stage.DAY_VOTE_RESULT}:
-            return _serialize_room(room)
+        if player_id and player_id != room.host_id:
+            raise HTTPException(status_code=403, detail="only host can advance the room.")
+        with room.lock:
+            if room.waiting_for:
+                return _serialize_room(room, viewer_id=player_id)
+            if room.state["winner"] and room.state["stage"] not in {Stage.NIGHT_RESULT, Stage.DAY_VOTE_RESULT}:
+                return _serialize_room(room, viewer_id=player_id)
 
-        result = room.graph.invoke(room.state, config=room.config)
-        _store_graph_result(room, result)
-        return _serialize_room(room)
+            result = room.graph.invoke(room.state, config=room.config)
+            _store_graph_result(room, result)
+        return _serialize_room(room, viewer_id=player_id)
 
     @app.post("/api/rooms/{room_id}/submit_action")
-    def submit_action(room_id: str, payload: SubmitActionRequest) -> dict[str, Any]:
+    def submit_action(room_id: str, payload: SubmitActionRequest, player_id: Optional[str] = None) -> dict[str, Any]:
         room = _get_room(room_id)
-        if not room.waiting_for:
-            raise HTTPException(status_code=400, detail="No human action is currently required.")
-        if payload.kind != room.waiting_for.get("kind"):
-            raise HTTPException(status_code=400, detail="Submitted action does not match current requirement.")
+        with room.lock:
+            if not room.waiting_for:
+                raise HTTPException(status_code=400, detail="No human action is currently required.")
+            if payload.kind != room.waiting_for.get("kind"):
+                raise HTTPException(status_code=400, detail="Submitted action does not match current requirement.")
+            _ensure_current_human_player(room, player_id)
 
-        result = room.graph.invoke(Command(resume=_resume_payload(payload)), config=room.config)
-        _store_graph_result(room, result)
-        return _serialize_room(room)
+            result = room.graph.invoke(Command(resume=_resume_payload(payload)), config=room.config)
+            _store_graph_result(room, result)
+        return _serialize_room(room, viewer_id=player_id)
 
     return app
 
@@ -169,6 +306,39 @@ def _resume_payload(payload: SubmitActionRequest) -> dict[str, Any]:
     return data
 
 
+def _ensure_current_human_player(room: Room, player_id: Optional[str]) -> None:
+    if not player_id:
+        return
+    expected_id = _waiting_player_id(room)
+    if expected_id and player_id != expected_id:
+        raise HTTPException(status_code=403, detail="action is only allowed for the current player.")
+
+
+def _waiting_player_id(room: Room) -> Optional[str]:
+    if not room.waiting_for:
+        return None
+    for key in ("speaker_id", "voter_id"):
+        value = room.waiting_for.get(key)
+        if isinstance(value, str):
+            return value
+    if room.state is None:
+        return None
+    game_state = graph_state_to_game_state(room.state)
+    kind = room.waiting_for.get("kind")
+    role_by_kind = {
+        "wolf_kill": Role.WEREWOLF,
+        "seer_check": Role.SEER,
+        "witch_action": Role.WITCH,
+        "hunter_shot": Role.HUNTER,
+    }.get(kind)
+    if role_by_kind is None:
+        return None
+    for player in game_state.players:
+        if player.is_human and player.is_alive and player.role == role_by_kind:
+            return player.id
+    return None
+
+
 def _make_players(human_name: str, human_seat: int) -> list[Player]:
     roles = DEFAULT_ROLES[:]
     random.shuffle(roles)
@@ -183,6 +353,41 @@ def _make_players(human_name: str, human_seat: int) -> list[Player]:
     return players
 
 
+def _make_multiplayer_players(members: list[RoomMember]) -> list[Player]:
+    roles = DEFAULT_ROLES[:]
+    random.shuffle(roles)
+    members_by_id = {member.id: member for member in members}
+    used_avatars = {member.avatar_id for member in members}
+    remaining_avatars = [avatar for avatar in AVATAR_CHOICES if avatar["id"] not in used_avatars]
+    ai_avatars = iter(remaining_avatars)
+    players = []
+    for seat in range(1, 10):
+        seat_id = str(seat)
+        role = roles[seat - 1]
+        member = members_by_id.get(seat_id)
+        if member:
+            players.append(Player(id=seat_id, name=member.name, role=role, is_human=True, avatar_id=member.avatar_id))
+            continue
+        avatar = next(ai_avatars)
+        players.append(Player(id=seat_id, name=avatar["ai_name"], role=role, is_human=False, avatar_id=avatar["id"]))
+    return players
+
+
+def _valid_avatar_id(avatar_id: str) -> str:
+    avatar_ids = {avatar["id"] for avatar in AVATAR_CHOICES}
+    if avatar_id not in avatar_ids:
+        raise HTTPException(status_code=400, detail="unknown avatar.")
+    return avatar_id
+
+
+def _next_member_id(members: list[RoomMember]) -> str:
+    used_ids = {member.id for member in members}
+    for seat in range(1, 10):
+        if str(seat) not in used_ids:
+            return str(seat)
+    raise HTTPException(status_code=400, detail="room is full.")
+
+
 def _get_room(room_id: str) -> Room:
     room = ROOMS.get(room_id)
     if room is None:
@@ -190,13 +395,20 @@ def _get_room(room_id: str) -> Room:
     return room
 
 
-def _serialize_room(room: Room) -> dict[str, Any]:
+def _serialize_room(room: Room, viewer_id: Optional[str] = None) -> dict[str, Any]:
+    if room.status == "waiting":
+        return _serialize_waiting_room(room, viewer_id or room.human_id)
+    if room.state is None:
+        raise HTTPException(status_code=500, detail="room has no game state.")
     game_state = graph_state_to_game_state(room.state)
-    human = next(player for player in game_state.players if player.id == room.human_id)
+    human_id = viewer_id or room.human_id
+    human = next(player for player in game_state.players if player.id == human_id)
     show_wolf_teammates = human.role == Role.WEREWOLF and not bool(game_state.winner)
     return {
         "room_id": room.room_id,
-        "human_id": room.human_id,
+        "status": room.status,
+        "host_id": room.host_id,
+        "human_id": human_id,
         "human_role": human.role.value,
         "phase": game_state.phase.value,
         "stage": game_state.stage.value,
@@ -208,7 +420,7 @@ def _serialize_room(room: Room) -> dict[str, Any]:
         "players": [
             _serialize_player(
                 player,
-                reveal_role=_should_reveal_role(player, room.human_id, bool(game_state.winner), show_wolf_teammates),
+                reveal_role=_should_reveal_role(player, human_id, bool(game_state.winner), show_wolf_teammates),
             )
             for player in game_state.players
         ],
@@ -219,6 +431,42 @@ def _serialize_room(room: Room) -> dict[str, Any]:
     }
 
 
+def _serialize_waiting_room(room: Room, viewer_id: str) -> dict[str, Any]:
+    used_avatars = {member.avatar_id for member in room.members}
+    return {
+        "room_id": room.room_id,
+        "status": room.status,
+        "host_id": room.host_id,
+        "human_id": viewer_id,
+        "human_count": len(room.members),
+        "ai_fill_count": 9 - len(room.members),
+        "members": [_serialize_member(member) for member in room.members],
+        "available_avatars": [avatar for avatar in AVATAR_CHOICES if avatar["id"] not in used_avatars],
+    }
+
+
+def _serialize_lobby_room(room: Room) -> dict[str, Any]:
+    host = next((member for member in room.members if member.id == room.host_id), room.members[0])
+    return {
+        "room_id": room.room_id,
+        "status": room.status,
+        "host_id": room.host_id,
+        "host_name": host.name,
+        "human_count": len(room.members),
+        "ai_fill_count": 9 - len(room.members),
+    }
+
+
+def _serialize_member(member: RoomMember) -> dict[str, Any]:
+    return {
+        "id": member.id,
+        "name": member.name,
+        "avatar_id": member.avatar_id,
+        "is_host": member.is_host,
+        "is_ready": member.is_ready,
+    }
+
+
 def _serialize_player(player: Player, reveal_role: bool) -> dict[str, Any]:
     return {
         "id": player.id,
@@ -226,6 +474,7 @@ def _serialize_player(player: Player, reveal_role: bool) -> dict[str, Any]:
         "role": player.role.value if reveal_role else "hidden",
         "is_human": player.is_human,
         "is_alive": player.is_alive,
+        "avatar_id": player.avatar_id,
     }
 
 
