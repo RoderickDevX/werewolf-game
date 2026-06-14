@@ -4,6 +4,13 @@ from pathlib import Path
 APP_JS = Path(__file__).resolve().parents[1] / "src" / "werewolf_langgraph" / "static" / "app.js"
 
 
+def _css_block(source, selector, start=0):
+    selector_index = source.index(selector, start)
+    block_start = source.index("{", selector_index) + 1
+    block_end = source.index("}", block_start)
+    return source[block_start:block_end]
+
+
 def test_start_game_shows_feedback_before_network_request():
     source = APP_JS.read_text(encoding="utf-8")
     start_index = source.index("async function startGame()")
@@ -640,14 +647,14 @@ def test_mobile_game_player_roster_is_translucent_enough_for_character_backgroun
 
 def test_mobile_game_background_does_not_resize_during_browser_chrome_scroll():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+    mobile_media_index = css.index("@media (max-width: 680px)")
+    mobile_background = _css_block(css, ".game-screen::before", mobile_media_index)
 
-    assert ".game-screen::before" in css
-    assert "@media (max-width: 680px)" in css
-    assert "position: fixed;" in css
-    assert "position: absolute;" in css
-    assert "height: 100%;" in css
-    assert "min-height: 100svh;" in css
-    assert "background-size: auto 100svh;" in css
+    assert "position: fixed;" in mobile_background
+    assert "position: absolute;" not in mobile_background
+    assert "height: 100%;" not in mobile_background
+    assert "min-height: 100svh;" in mobile_background
+    assert "background-size: auto 100svh;" in mobile_background
 
 
 def test_mobile_game_layout_allows_setup_action_to_be_reached():

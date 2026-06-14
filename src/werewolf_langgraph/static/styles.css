@@ -1220,11 +1220,10 @@ textarea {
   .game-screen::before {
     background-position: center top;
     background-size: auto 100svh;
-    height: 100%;
     margin-left: calc(50% - 50vw);
     margin-right: calc(50% - 50vw);
     min-height: 100svh;
-    position: absolute;
+    position: fixed;
   }
 
   .desktop-table-shell {
