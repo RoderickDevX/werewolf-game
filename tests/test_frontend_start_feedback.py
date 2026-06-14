@@ -347,7 +347,7 @@ def test_cartoon_werewolf_opening_uses_poster_artwork():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
 
     assert "<title>卡通狼人杀</title>" in index_html
-    assert 'src="/static/assets/uploaded-opening-poster.webp"' in index_html
+    assert 'src="/static/assets/uploaded-opening-poster-mobile.webp"' in index_html
     assert 'class="poster-start-button"' in index_html
     assert '<button id="startButton" class="poster-start-button" type="button"' in index_html
     assert ".poster-start-button:hover" in css
@@ -375,7 +375,7 @@ def test_opening_poster_waits_for_image_load_before_showing_controls():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
 
     assert 'rel="preload"' in index_html
-    assert 'href="/static/assets/uploaded-opening-poster.webp"' in index_html
+    assert 'href="/static/assets/uploaded-opening-poster-mobile.webp"' in index_html
     assert 'id="openingPoster"' in index_html
     assert 'class="start-content poster-loading"' in index_html
     assert 'id="posterLoading"' in index_html
@@ -461,6 +461,7 @@ def test_mobile_lobby_avatar_grid_and_waiting_room_helpers_exist():
     assert "let selectedAvatarId = avatarChoices[0].id;" in source
     assert "function renderAvatarChoices" in source
     assert "avatar-choice-button" in source
+    assert 'loading="lazy" decoding="async"' in source
     assert 'document.querySelector("#avatarChoiceGrid")' in source
     assert 'document.querySelector("#copyRoomCodeButton")?.addEventListener("click", copyWaitingRoomCode);' in source
     assert "async function copyWaitingRoomCode()" in source
