@@ -13,7 +13,6 @@ setup(
             "static/*.html",
             "static/*.css",
             "static/*.js",
-            "static/assets/*.png",
             "static/assets/*.webp",
             "static/assets/avatars/*.webp",
         ]

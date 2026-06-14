@@ -50,14 +50,26 @@ class PackageStaticAssetsTest(unittest.TestCase):
             "werewolf_langgraph/static/styles.css",
             "werewolf_langgraph/static/home.css",
             "werewolf_langgraph/static/app.js",
-            "werewolf_langgraph/static/assets/uploaded-opening-poster.webp",
             "werewolf_langgraph/static/assets/uploaded-opening-poster-mobile.webp",
-            "werewolf_langgraph/static/assets/game-cartoon-background.webp",
             "werewolf_langgraph/static/assets/game-mobile-character-background.webp",
             "werewolf_langgraph/static/assets/avatars/human.webp",
             "werewolf_langgraph/static/assets/avatars/garfield.webp",
         }
         self.assertTrue(expected_assets.issubset(names), sorted(expected_assets - names))
+
+        excluded_assets = {
+            "werewolf_langgraph/static/assets/cartoon-werewolf-opening-wide.png",
+            "werewolf_langgraph/static/assets/cartoon-werewolf-opening.png",
+            "werewolf_langgraph/static/assets/game-cartoon-background.png",
+            "werewolf_langgraph/static/assets/game-mobile-character-background.png",
+            "werewolf_langgraph/static/assets/uploaded-opening-poster.png",
+            "werewolf_langgraph/static/assets/uploaded-opening-poster.webp",
+            "werewolf_langgraph/static/assets/game-cartoon-background.webp",
+            "werewolf_langgraph/static/assets/cartoon-werewolf-mobile-bg.png",
+            "werewolf_langgraph/static/assets/cartoon-werewolf-mobile-bg.webp",
+            "werewolf_langgraph/static/assets/avatars/garfield.png",
+        }
+        self.assertTrue(excluded_assets.isdisjoint(names), sorted(excluded_assets & names))
 
 
 if __name__ == "__main__":
