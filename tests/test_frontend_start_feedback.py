@@ -655,6 +655,23 @@ def test_mobile_game_layout_allows_setup_action_to_be_reached():
     assert "align-content: start;" in css
 
 
+def test_mobile_player_cards_keep_chinese_names_horizontal():
+    source = APP_JS.read_text(encoding="utf-8")
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+
+    assert 'name.className = "player-name";' in source
+    assert 'meta.className = "player-meta";' in source
+    assert ".player-name" in css
+    assert ".player-meta" in css
+    assert "white-space: nowrap;" in css
+    assert "text-overflow: ellipsis;" in css
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in css
+    assert "#desktopPlayerRail .players {" in css
+    assert "#desktopPlayerRail .player {" in css
+    assert "grid-template-columns: initial;" in css
+    assert "justify-items: center;" in css
+
+
 def test_desktop_visible_chinese_text_is_not_mojibake():
     index_html = APP_JS.with_name("index.html").read_text(encoding="utf-8")
 

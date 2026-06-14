@@ -729,23 +729,43 @@ button {
   display: block;
 }
 
-.player strong {
+.player-name {
   font-size: 16px;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-#desktopPlayerRail .player strong {
+#desktopPlayerRail .player-name {
   font-size: 14px;
 }
 
-.player span {
+.player-meta {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.player-meta span {
   color: var(--muted);
   font-size: 13px;
   margin-top: 7px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-#desktopPlayerRail .player span {
+#desktopPlayerRail .player-meta {
+  justify-content: flex-start;
+}
+
+#desktopPlayerRail .player-meta span {
   display: inline-block;
   margin-right: 8px;
 }
@@ -1222,7 +1242,11 @@ textarea {
   }
 
   .players {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #desktopPlayerRail .players {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .phase-stage,
@@ -1239,6 +1263,47 @@ textarea {
   .player {
     background: rgba(255, 255, 255, 0.035);
     border-color: rgba(255, 255, 255, 0.11);
+    grid-template-columns: initial;
+    justify-items: center;
+    min-height: 132px;
+    padding: 10px;
+    text-align: center;
+  }
+
+  #desktopPlayerRail .player {
+    grid-template-columns: initial;
+    justify-items: center;
+    min-height: 132px;
+    text-align: center;
+  }
+
+  .player-avatar {
+    height: 60px;
+    margin-bottom: 8px;
+    width: 60px;
+  }
+
+  #desktopPlayerRail .player-avatar {
+    height: 60px;
+    margin: 0 0 8px;
+    width: 60px;
+  }
+
+  .player-name {
+    font-size: 14px;
+  }
+
+  .player-meta {
+    gap: 8px;
+  }
+
+  #desktopPlayerRail .player-meta {
+    justify-content: center;
+  }
+
+  .player-meta span {
+    font-size: 12px;
+    margin-top: 5px;
   }
 
   .start-screen {

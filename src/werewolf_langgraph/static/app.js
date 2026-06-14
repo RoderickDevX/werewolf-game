@@ -1012,12 +1012,16 @@ function renderPlayers(activeSpeakerId = null) {
     }
 
     const name = document.createElement("strong");
+    name.className = "player-name";
     name.textContent = `${player.id}. ${player.name}${player.id === room.human_id ? "（你）" : ""}`;
+    const meta = document.createElement("div");
+    meta.className = "player-meta";
     const role = document.createElement("span");
     role.textContent = roleLabel;
     const status = document.createElement("span");
     status.textContent = player.is_alive ? "存活" : "出局";
-    card.append(name, role, status);
+    meta.append(role, status);
+    card.append(name, meta);
     container.appendChild(card);
   }
 }
