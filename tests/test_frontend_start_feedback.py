@@ -638,6 +638,18 @@ def test_mobile_game_player_roster_is_translucent_enough_for_character_backgroun
     assert "background: rgba(255, 255, 255, 0.035);" in css
 
 
+def test_mobile_game_background_does_not_resize_during_browser_chrome_scroll():
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+
+    assert ".game-screen::before" in css
+    assert "@media (max-width: 680px)" in css
+    assert "position: fixed;" in css
+    assert "position: absolute;" in css
+    assert "height: 100%;" in css
+    assert "min-height: 100svh;" in css
+    assert "background-size: auto 100svh;" in css
+
+
 def test_mobile_game_layout_allows_setup_action_to_be_reached():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
 
