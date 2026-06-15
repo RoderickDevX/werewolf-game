@@ -653,8 +653,9 @@ def test_mobile_game_background_does_not_resize_during_browser_chrome_scroll():
     assert "position: fixed;" in mobile_background
     assert "position: absolute;" not in mobile_background
     assert "height: 100%;" not in mobile_background
-    assert "min-height: 100svh;" in mobile_background
-    assert "background-size: auto 100svh;" in mobile_background
+    assert "min-height: 100lvh;" in mobile_background
+    assert "background-repeat: no-repeat;" in mobile_background
+    assert "background-size: auto 100lvh;" in mobile_background
 
 
 def test_mobile_game_layout_allows_setup_action_to_be_reached():
