@@ -88,9 +88,8 @@ function initializeLobby() {
   populateAvatarSelect("#createAvatarSelect");
   renderAvatarChoices();
   bindLobbyEvents();
-  if (!restoreLocalSession()) {
-    loadLobbyRooms();
-  }
+  clearLocalSession();
+  loadLobbyRooms();
 }
 
 function bindLobbyEvents() {
@@ -109,39 +108,11 @@ function bindLobbyEvents() {
   });
 }
 
-function saveLocalSession(nextRoom) {
-  if (!nextRoom?.room_id || !nextRoom?.human_id) return;
-  localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ roomId: nextRoom.room_id, playerId: nextRoom.human_id }));
-  const url = new URL(window.location.href);
-  url.searchParams.set("room", nextRoom.room_id);
-  window.history.replaceState({}, "", url);
-}
-
 function clearLocalSession() {
   localStorage.removeItem(LOCAL_SESSION_KEY);
   const url = new URL(window.location.href);
   url.searchParams.delete("room");
   window.history.replaceState({}, "", url);
-}
-
-function restoreLocalSession() {
-  const params = new URLSearchParams(window.location.search);
-  const roomIdFromUrl = params.get("room");
-  const raw = localStorage.getItem(LOCAL_SESSION_KEY);
-  if (!raw) return false;
-  try {
-    const saved = JSON.parse(raw);
-    if (!saved?.roomId || !saved?.playerId) return false;
-    if (roomIdFromUrl && roomIdFromUrl !== saved.roomId) return false;
-    room = { room_id: saved.roomId };
-    localPlayerId = saved.playerId;
-    fetchRoomState();
-    startRoomPolling();
-    return true;
-  } catch (error) {
-    clearLocalSession();
-    return false;
-  }
 }
 
 function populateAvatarSelect(selector, available = avatarChoices) {
@@ -258,7 +229,6 @@ async function roomRequest(url, payload) {
     if (!response.ok) throw new Error(nextRoom.detail || "room request failed");
     room = nextRoom;
     localPlayerId = nextRoom.human_id;
-    saveLocalSession(nextRoom);
     renderWaitingRoom();
     showScreen("waiting");
     startRoomPolling();
@@ -372,7 +342,6 @@ async function startWaitingRoom() {
     room = nextRoom;
     currentStage = room.stage;
     renderedSpeechKeys = new Set();
-    saveLocalSession(nextRoom);
     showScreen("game");
     renderRoom();
   }

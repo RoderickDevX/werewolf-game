@@ -480,26 +480,33 @@ def test_mobile_lobby_avatar_grid_and_waiting_room_helpers_exist():
     assert "waiting-seat-avatar" in source
 
 
-def test_multiplayer_session_helpers_exist():
+def test_mobile_refresh_starts_from_lobby_instead_of_restoring_stale_room():
     source = APP_JS.read_text(encoding="utf-8")
+    initialize_start = source.index("function initializeLobby()")
+    initialize_end = source.index("function bindLobbyEvents()", initialize_start)
+    initialize_source = source[initialize_start:initialize_end]
+    room_request_start = source.index("async function roomRequest(url, payload)")
+    room_request_end = source.index("async function applyRemoteRoom(nextRoom)", room_request_start)
+    room_request_source = source[room_request_start:room_request_end]
+    start_waiting_start = source.index("async function startWaitingRoom()")
+    start_waiting_end = source.index("async function updateWaitingRoom", start_waiting_start)
+    start_waiting_source = source[start_waiting_start:start_waiting_end]
 
-    assert 'const LOCAL_SESSION_KEY = "werewolf.roomSession";' in source
-    assert "function saveLocalSession(nextRoom)" in source
-    assert "function restoreLocalSession()" in source
     assert "function clearLocalSession()" in source
-    assert "localStorage.setItem(LOCAL_SESSION_KEY" in source
-    assert "localStorage.getItem(LOCAL_SESSION_KEY)" in source
     assert "localStorage.removeItem(LOCAL_SESSION_KEY)" in source
-    assert "new URLSearchParams(window.location.search)" in source
+    assert "loadLobbyRooms();" in initialize_source
+    assert "function saveLocalSession" not in source
+    assert "restoreLocalSession()" not in initialize_source
+    assert "saveLocalSession(nextRoom);" not in room_request_source
+    assert "saveLocalSession(nextRoom);" not in start_waiting_source
 
 
-def test_room_request_saves_session_and_starts_polling():
+def test_room_request_enters_room_and_starts_polling_without_url_restore():
     source = APP_JS.read_text(encoding="utf-8")
     start_index = source.index("async function roomRequest(url, payload)")
     end_index = source.index("function renderWaitingRoom()", start_index)
     room_request_source = source[start_index:end_index]
 
-    assert "saveLocalSession(nextRoom);" in room_request_source
     assert "startRoomPolling();" in room_request_source
 
 
