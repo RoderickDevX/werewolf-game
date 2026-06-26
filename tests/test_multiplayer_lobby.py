@@ -73,6 +73,37 @@ def test_join_room_adds_next_human_seat(monkeypatch):
     assert [member["id"] for member in joined["members"]] == ["1", "2"]
 
 
+def test_leave_room_removes_non_host_from_waiting_room(monkeypatch):
+    monkeypatch.setattr(web, "build_game_graph", lambda llm: None)
+    client = TestClient(web.create_app())
+    room = client.post("/api/rooms", json={"human_name": "Alice", "avatar_id": "shinchan"}).json()
+    joined = client.post(
+        f"/api/rooms/{room['room_id']}/join",
+        json={"human_name": "Bob", "avatar_id": "nailong"},
+    ).json()
+
+    response = client.post(f"/api/rooms/{room['room_id']}/leave", json={"player_id": joined["human_id"]})
+
+    assert response.status_code == 200
+    remaining = client.get(f"/api/rooms/{room['room_id']}", params={"player_id": room["human_id"]}).json()
+    assert remaining["human_count"] == 1
+    assert [member["id"] for member in remaining["members"]] == ["1"]
+    assert "nailong" in {avatar["id"] for avatar in remaining["available_avatars"]}
+
+
+def test_leave_room_deletes_room_for_host(monkeypatch):
+    monkeypatch.setattr(web, "build_game_graph", lambda llm: None)
+    client = TestClient(web.create_app())
+    room = client.post("/api/rooms", json={"human_name": "Alice", "avatar_id": "shinchan"}).json()
+
+    response = client.post(f"/api/rooms/{room['room_id']}/leave", json={"player_id": room["human_id"]})
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "closed"}
+    assert client.get(f"/api/rooms/{room['room_id']}").status_code == 404
+    assert client.get("/api/rooms").json()["rooms"] == []
+
+
 def test_join_room_rejects_full_room(monkeypatch):
     monkeypatch.setattr(web, "build_game_graph", lambda llm: None)
     client = TestClient(web.create_app())

@@ -246,6 +246,18 @@ def create_app() -> FastAPI:
         ]
         return _serialize_room(room, viewer_id=payload.player_id)
 
+    @app.post("/api/rooms/{room_id}/leave")
+    def leave_room(room_id: str, payload: PlayerRoomRequest) -> dict[str, Any]:
+        room = _get_room(room_id)
+        if payload.player_id == room.host_id or room.status == "playing":
+            ROOMS.pop(room_id, None)
+            return {"status": "closed"}
+        room.members = [member for member in room.members if member.id != payload.player_id]
+        if not room.members:
+            ROOMS.pop(room_id, None)
+            return {"status": "closed"}
+        return _serialize_room(room, viewer_id=room.host_id)
+
     @app.post("/api/rooms/{room_id}/start")
     def start_room(room_id: str, payload: PlayerRoomRequest) -> dict[str, Any]:
         room = _get_room(room_id)

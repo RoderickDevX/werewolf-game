@@ -186,12 +186,11 @@ def test_start_game_uses_custom_human_name_input():
     assert "human_name: humanName" in source
 
 
-def test_start_button_opens_name_modal_before_room_creation():
+def test_single_player_name_modal_logic_remains_available():
     source = APP_JS.read_text(encoding="utf-8")
 
     assert "function showNameModal()" in source
     assert "function hideNameModal()" in source
-    assert 'document.querySelector("#startButton").addEventListener("click", showNameModal);' in source
     assert 'document.querySelector("#confirmNameButton").addEventListener("click", startGame);' in source
     assert 'document.querySelector("#cancelNameButton").addEventListener("click", hideNameModal);' in source
     assert 'document.querySelector("#humanNameInput").focus();' in source
@@ -376,6 +375,42 @@ def test_cartoon_werewolf_opening_uses_poster_artwork():
     assert "cartoon-werewolf-opening-wide.png" not in css
 
 
+def test_opening_poster_is_initial_gate_before_lobby():
+    source = APP_JS.read_text(encoding="utf-8")
+    index_html = APP_JS.with_name("index.html").read_text(encoding="utf-8")
+
+    assert '<section id="startScreen" class="start-screen">' in index_html
+    assert '<section id="lobbyScreen" class="lobby-screen hidden">' in index_html
+    assert '<button id="exitGameButton" class="exit-game-button hidden" type="button">退出游戏</button>' in index_html
+    assert "function enterLobby()" in source
+    assert 'showScreen("lobby");' in source
+    assert 'document.querySelector("#exitGameButton")?.classList.toggle("hidden", name === "start");' in source
+    assert 'document.querySelector("#startButton").addEventListener("click", enterLobby);' in source
+    assert 'document.querySelector("#startButton").addEventListener("click", showNameModal);' not in source
+
+
+def test_exit_game_returns_to_opening_poster():
+    source = APP_JS.read_text(encoding="utf-8")
+    exit_start = source.index("async function exitGame()")
+    exit_end = source.index("function resetLocalGameState()", exit_start)
+    exit_source = source[exit_start:exit_end]
+
+    assert 'showScreen("start");' in exit_source
+    assert 'showScreen("lobby");' not in exit_source
+    assert "showLobbyStatus" not in exit_source
+
+
+def test_back_to_lobby_button_returns_to_lobby_not_opening():
+    source = APP_JS.read_text(encoding="utf-8")
+    return_start = source.index("function returnToLobby()")
+    return_end = source.index("async function exitGame()", return_start)
+    return_source = source[return_start:return_end]
+
+    assert 'document.querySelector("#backToLobbyButton")?.addEventListener("click", returnToLobby);' in source
+    assert 'showScreen("lobby");' in return_source
+    assert "exitGame()" not in return_source
+
+
 def test_opening_poster_waits_for_image_load_before_showing_controls():
     source = APP_JS.read_text(encoding="utf-8")
     index_html = APP_JS.with_name("index.html").read_text(encoding="utf-8")
@@ -473,9 +508,9 @@ def test_mobile_lobby_avatar_grid_and_waiting_room_helpers_exist():
     assert 'avatar.width = 76;' in source
     assert 'avatar.height = 76;' in source
     assert 'document.querySelector("#avatarChoiceGrid")' in source
-    assert 'document.querySelector("#copyRoomCodeButton")?.addEventListener("click", copyWaitingRoomCode);' in source
-    assert "async function copyWaitingRoomCode()" in source
-    assert 'document.querySelector("#waitingRoomCode").textContent = room.room_id;' in source
+    assert 'document.querySelector("#copyRoomCodeButton")' not in source
+    assert "async function copyWaitingRoomCode()" not in source
+    assert 'document.querySelector("#waitingRoomCode")' not in source
     assert 'document.querySelector("#waitingHostStatus").textContent' in source
     assert "waiting-seat-avatar" in source
 
@@ -705,7 +740,8 @@ def test_desktop_visible_chinese_text_is_not_mojibake():
     assert "<title>卡通狼人杀</title>" in index_html
     assert "联机大厅" in index_html
     assert "创建房间" in index_html
-    assert "等待房间" in index_html
+    assert "座位" in index_html
+    assert "开始游戏" in index_html
     assert "公开记录" in index_html
     assert "查看身份" in index_html
     assert "鍗" not in index_html

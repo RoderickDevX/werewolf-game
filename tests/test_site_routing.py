@@ -57,8 +57,8 @@ def test_game_page_contains_mobile_waiting_room_controls():
     response = client.get("/", headers={"Host": "127.0.0.1:8000"})
 
     assert response.status_code == 200
-    assert 'id="waitingRoomCode"' in response.text
-    assert 'id="copyRoomCodeButton"' in response.text
+    assert 'id="waitingRoomCode"' not in response.text
+    assert 'id="copyRoomCodeButton"' not in response.text
     assert 'id="waitingSeats"' in response.text
     assert 'id="readyButton"' in response.text
     assert 'id="startRoomButton"' in response.text

@@ -93,19 +93,14 @@ function initializeLobby() {
 }
 
 function bindLobbyEvents() {
-  document.querySelector("#refreshRoomsButton")?.addEventListener("click", loadLobbyRooms);
   document.querySelector("#createRoomButton")?.addEventListener("click", createLobbyRoom);
   document.querySelector("#readyButton")?.addEventListener("click", toggleReady);
   document.querySelector("#startRoomButton")?.addEventListener("click", startWaitingRoom);
-  document.querySelector("#copyRoomCodeButton")?.addEventListener("click", copyWaitingRoomCode);
-  document.querySelector("#backToLobbyButton")?.addEventListener("click", () => {
-    room = null;
-    localPlayerId = null;
-    clearLocalSession();
-    stopRoomPolling();
-    showScreen("lobby");
-    loadLobbyRooms();
-  });
+  const exitButton = document.querySelector("#exitGameButton");
+  exitButton?.addEventListener("click", exitGame);
+  exitButton?.addEventListener("pointerenter", () => exitButton.classList.add("is-hovered"));
+  exitButton?.addEventListener("pointerleave", () => exitButton.classList.remove("is-hovered"));
+  document.querySelector("#backToLobbyButton")?.addEventListener("click", returnToLobby);
 }
 
 function clearLocalSession() {
@@ -292,10 +287,70 @@ function stopRoomPolling() {
   roomPollTimer = null;
 }
 
+function returnToLobby() {
+  resetLocalGameState();
+  showScreen("lobby");
+  loadLobbyRooms();
+}
+
+async function exitGame() {
+  const exitingRoomId = room?.room_id;
+  const exitingPlayerId = localPlayerId;
+  resetLocalGameState();
+  showScreen("start");
+  if (exitingRoomId && exitingPlayerId) {
+    try {
+      await fetch(`/api/rooms/${exitingRoomId}/leave`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ player_id: exitingPlayerId }),
+      });
+    } catch (error) {
+      // 本地退出必须立即生效，服务端清理失败不阻塞回到大厅。
+    }
+  }
+  loadLobbyRooms();
+}
+
+function resetLocalGameState() {
+  room = null;
+  localPlayerId = null;
+  currentStage = "setup";
+  renderedSpeechKeys = new Set();
+  discussionPlaybackRunning = false;
+  votePlaybackRunning = false;
+  roleRevealed = false;
+  pendingChoice = null;
+  pendingSeerReveal = null;
+  witchActionFlow = null;
+  roomRequestInFlight = false;
+  roomPollRequestId += 1;
+  stopRoomPolling();
+  clearLocalSession();
+  clearTimeout(autoAdvanceTimer);
+  autoAdvanceTimer = null;
+  autoAdvanceStage = null;
+  clearTimeout(discussionAdvanceTimer);
+  discussionAdvanceTimer = null;
+  discussionAdvanceKey = null;
+  clearTimeout(voteAdvanceTimer);
+  voteAdvanceTimer = null;
+  voteAdvanceKey = null;
+  document.querySelector("#nameModal")?.classList.add("hidden");
+  document.querySelector("#roleModal")?.classList.add("hidden");
+  document.querySelector("#seerRevealModal")?.classList.add("hidden");
+  document.querySelector("#fogTransition")?.classList.remove("active");
+  selectedAvatarId = avatarChoices[0].id;
+  const nameInput = document.querySelector("#createNameInput");
+  if (nameInput) nameInput.value = "";
+  populateAvatarSelect("#createAvatarSelect");
+  renderAvatarChoices();
+  setStartButtonState("idle");
+  showWaitingStatus("");
+}
+
 function renderWaitingRoom() {
   if (!room || room.status !== "waiting") return;
-  document.querySelector("#waitingRoomTitle").textContent = `房间 ${room.room_id}`;
-  document.querySelector("#waitingRoomCode").textContent = room.room_id;
   document.querySelector("#waitingRoomCount").textContent = `${room.human_count}/9 真人`;
   document.querySelector("#waitingRoomAiCount").textContent = `AI 补位 ${room.ai_fill_count}`;
   document.querySelector("#waitingHostStatus").textContent = localPlayerId === room.host_id ? "你是房主" : "等待房主开局";
@@ -318,16 +373,6 @@ function renderWaitingRoom() {
   document.querySelector("#startRoomButton").classList.toggle("hidden", localPlayerId !== room.host_id);
   populateAvatarSelect("#createAvatarSelect", room.available_avatars && room.available_avatars.length ? room.available_avatars : avatarChoices);
   renderAvatarChoices(room.available_avatars && room.available_avatars.length ? room.available_avatars : avatarChoices);
-}
-
-async function copyWaitingRoomCode() {
-  if (!room?.room_id) return;
-  try {
-    await navigator.clipboard.writeText(room.room_id);
-    showWaitingStatus("房间码已复制");
-  } catch (error) {
-    showWaitingStatus(`房间码：${room.room_id}`);
-  }
 }
 
 async function toggleReady() {
@@ -383,6 +428,11 @@ function showScreen(name) {
   document.querySelector("#waitingRoomScreen")?.classList.toggle("hidden", name !== "waiting");
   document.querySelector("#startScreen")?.classList.toggle("hidden", name !== "start");
   document.querySelector("#gameScreen")?.classList.toggle("hidden", name !== "game");
+  document.querySelector("#exitGameButton")?.classList.toggle("hidden", name === "start");
+}
+
+function enterLobby() {
+  showScreen("lobby");
 }
 
 function showLobbyStatus(message) {
@@ -1341,7 +1391,7 @@ function canDriveRoom() {
 function setBusy(isBusy) {
   if (isBusy) {
     document.querySelectorAll("button, textarea, select").forEach((element) => {
-      if (element.id !== "startButton") element.disabled = true;
+      if (!["startButton", "exitGameButton"].includes(element.id)) element.disabled = true;
     });
     return;
   }
@@ -1410,7 +1460,7 @@ if (poster) {
 
 initializeLobby();
 
-document.querySelector("#startButton").addEventListener("click", showNameModal);
+document.querySelector("#startButton").addEventListener("click", enterLobby);
 document.querySelector("#confirmNameButton").addEventListener("click", startGame);
 document.querySelector("#cancelNameButton").addEventListener("click", hideNameModal);
 document.querySelector("#confirmRoleButton")?.addEventListener("click", showRoleModal);
