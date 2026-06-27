@@ -580,13 +580,13 @@ button {
 
 .game-screen::before {
   background:
-    linear-gradient(180deg, rgba(8, 12, 28, 0.42), rgba(8, 12, 28, 0.58)),
-    radial-gradient(circle at 50% 48%, rgba(88, 151, 210, 0.2), transparent 46%),
+    linear-gradient(180deg, rgba(8, 12, 28, 0.5), rgba(8, 12, 28, 0.68)),
+    radial-gradient(circle at 50% 48%, rgba(88, 151, 210, 0.16), transparent 46%),
     url("/static/assets/game-mobile-character-background.webp");
   background-color: #07111f;
-  background-position: center top;
+  background-position: center 34%;
   background-repeat: no-repeat;
-  background-size: auto min(100vh, 1080px);
+  background-size: cover;
   content: "";
   filter: saturate(1.08);
   inset: 0;

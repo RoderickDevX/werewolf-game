@@ -25,15 +25,15 @@ def test_static_image_payload_stays_small_for_mobile_visits():
     assert sum(image_path.stat().st_size for image_path in image_paths) <= max_total_image_bytes
 
 
-def test_desktop_game_background_does_not_crop_mobile_artwork():
+def test_desktop_game_background_covers_wide_viewports_without_mobile_strip():
     styles = (STATIC_DIR / "styles.css").read_text()
     desktop_background = re.search(r"\.game-screen::before \{(?P<body>.*?)\n\}", styles, re.DOTALL)
     assert desktop_background is not None
 
     desktop_rules = desktop_background.group("body")
-    assert "background-size: auto min(100vh, 1080px);" in desktop_rules
+    assert "background-size: cover;" in desktop_rules
+    assert "background-position: center 34%;" in desktop_rules
     assert "background-repeat: no-repeat;" in desktop_rules
-    assert "cover" not in desktop_rules
 
     mobile_background = re.search(
         r"@media \(max-width: 680px\).*?\.game-screen::before \{(?P<body>.*?)\n  \}",
