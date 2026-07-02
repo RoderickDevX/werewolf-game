@@ -149,6 +149,33 @@ def test_start_room_requires_host_and_fills_ai_players(monkeypatch):
     assert client.get("/api/rooms").json()["rooms"] == []
 
 
+def test_start_room_randomizes_human_seat_numbers(monkeypatch):
+    def shuffle_seats(items):
+        if items == [str(index) for index in range(1, 10)]:
+            items[:] = ["4", "7", "2", "1", "3", "5", "6", "8", "9"]
+
+    monkeypatch.setattr(random, "shuffle", shuffle_seats)
+    monkeypatch.setattr(web, "create_deepseek_llm", lambda config: object())
+    monkeypatch.setattr(web, "build_game_graph", lambda llm: None)
+    client = TestClient(web.create_app())
+    room = client.post("/api/rooms", json={"human_name": "Alice", "avatar_id": "shinchan"}).json()
+    bob = client.post(
+        f"/api/rooms/{room['room_id']}/join",
+        json={"human_name": "Bob", "avatar_id": "nailong"},
+    ).json()
+
+    started = client.post(f"/api/rooms/{room['room_id']}/start", json={"player_id": room["human_id"]}).json()
+    bob_view = client.get(f"/api/rooms/{room['room_id']}", params={"player_id": bob["human_id"]}).json()
+
+    assert started["human_id"] == "4"
+    assert started["host_id"] == "4"
+    assert bob_view["human_id"] == "7"
+    players_by_name = {player["name"]: player for player in started["players"]}
+    assert players_by_name["Alice"]["id"] == "4"
+    assert players_by_name["Bob"]["id"] == "7"
+    assert [player["id"] for player in started["players"]] == [str(index) for index in range(1, 10)]
+
+
 def test_started_room_preserves_human_and_ai_avatar_ids(monkeypatch):
     monkeypatch.setattr(random, "shuffle", lambda items: None)
     monkeypatch.setattr(web, "create_deepseek_llm", lambda config: object())

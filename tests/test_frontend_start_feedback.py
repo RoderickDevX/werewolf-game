@@ -283,9 +283,28 @@ def test_vote_target_selection_survives_room_rerender():
     end_index = source.index("function renderEvents()", start_index)
     render_vote_targets_source = source[start_index:end_index]
 
-    assert "const selectedTargetId = select.value;" in render_vote_targets_source
+    assert "let selectedVoteTargetId = null;" in source
+    assert "let voteTargetTurnKey = null;" in source
+    assert "let voteTargetOptionsKey = null;" in source
+    assert "let voteTargetFocusKey = null;" in source
+    assert "const selectedTargetId = selectedVoteTargetId || select.value;" in render_vote_targets_source
     assert "if (selectedTargetId && select.querySelector" in render_vote_targets_source
     assert "select.value = selectedTargetId;" in render_vote_targets_source
+    assert "selectedVoteTargetId = selectedTargetId;" in render_vote_targets_source
+    assert "document.activeElement === select && voteTargetOptionsKey === optionsKey" in render_vote_targets_source
+    assert 'document.querySelector("#voteTarget")?.addEventListener("input"' in source
+    assert 'document.querySelector("#voteTarget")?.addEventListener("change"' in source
+
+
+def test_vote_select_focus_is_not_stolen_on_every_poll_render():
+    source = APP_JS.read_text(encoding="utf-8")
+    start_index = source.index('} else if (wait.kind === "vote")')
+    end_index = source.index("if (!isMine) return;", start_index)
+    vote_waiting_source = source[start_index:end_index]
+
+    assert "const focusKey = `${room.room_id}:${room.day}:${wait.voter_id || room.human_id}`;" in vote_waiting_source
+    assert "target && isMine && voteTargetFocusKey !== focusKey" in vote_waiting_source
+    assert "voteTargetFocusKey = focusKey;" in vote_waiting_source
 
 
 def test_vote_feed_and_auto_advance_exist():
@@ -433,13 +452,20 @@ def test_opening_poster_waits_for_image_load_before_showing_controls():
 def test_game_screen_uses_separate_cartoon_background():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
     asset = APP_JS.with_name("assets") / "game-mobile-character-background.webp"
+    index_html = APP_JS.with_name("index.html").read_text(encoding="utf-8")
 
     assert asset.exists()
-    assert ".game-screen::before" in css
+    assert 'class="game-background" aria-hidden="true"' in index_html
+    assert 'class="game-content"' in index_html
+    assert ".game-background::before" in css
+    assert ".game-background::after" in css
+    assert 'url("/static/assets/game-desktop-village-background.webp")' in css
     assert 'url("/static/assets/game-mobile-character-background.webp")' in css
-    assert "filter: saturate(1.08);" in css
-    assert "background: rgba(13, 17, 26, 0.52);" in css
-    assert "backdrop-filter: blur(6px);" in css
+    assert "filter: blur(14px) brightness(0.95) saturate(1.12);" in css
+    assert "pointer-events: none;" in css
+    assert "opacity: 0.25;" in css
+    assert "--panel-bg: rgba(7, 12, 30, 0.28);" in css
+    assert "backdrop-filter: none;" in css
     assert "rgba(4, 7, 14, 0.72)" not in css
 
 
@@ -690,14 +716,14 @@ def test_mobile_game_player_roster_is_translucent_enough_for_character_backgroun
 def test_mobile_game_background_does_not_resize_during_browser_chrome_scroll():
     css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
     mobile_media_index = css.index("@media (max-width: 680px)")
-    mobile_background = _css_block(css, ".game-screen::before", mobile_media_index)
+    mobile_screen = _css_block(css, ".game-screen", mobile_media_index)
+    mobile_background = _css_block(css, ".game-background::after", mobile_media_index)
 
-    assert "position: fixed;" in mobile_background
-    assert "position: absolute;" not in mobile_background
-    assert "height: 100%;" not in mobile_background
+    assert '--room-bg-image: url("/static/assets/game-mobile-character-background.webp");' in mobile_screen
+    assert "--bg-scene-size: auto 100lvh;" in mobile_screen
     assert "min-height: 100lvh;" in mobile_background
-    assert "background-repeat: no-repeat;" in mobile_background
-    assert "background-size: auto 100lvh;" in mobile_background
+    assert "background-size:" in mobile_background
+    assert "var(--bg-scene-size);" in mobile_background
 
 
 def test_mobile_game_layout_allows_setup_action_to_be_reached():
@@ -732,6 +758,26 @@ def test_mobile_player_cards_keep_chinese_names_horizontal():
     assert "#desktopPlayerRail .player {" in css
     assert "grid-template-columns: initial;" in css
     assert "justify-items: center;" in css
+
+
+def test_player_role_and_status_pills_are_not_truncated():
+    source = APP_JS.read_text(encoding="utf-8")
+    css = APP_JS.with_name("styles.css").read_text(encoding="utf-8")
+    player_meta = _css_block(css, ".player-meta")
+    player_meta_span = _css_block(css, ".player-meta span")
+    desktop_meta = _css_block(css, "#desktopPlayerRail .player-meta")
+
+    assert "role.textContent = `身份：${roleLabel}`;" in source
+    assert 'status.textContent = `状态：${player.is_alive ? "存活" : "出局"}`;' in source
+    assert "flex-wrap: wrap;" in player_meta
+    assert "max-width:" not in player_meta
+    assert "overflow: visible;" in player_meta
+    assert "background: rgba(0, 0, 0, 0.28);" in player_meta_span
+    assert "color: rgba(255, 255, 255, 0.9);" in player_meta_span
+    assert "font-size: 14px;" in player_meta_span
+    assert "overflow: visible;" in player_meta_span
+    assert "text-overflow: ellipsis;" not in player_meta_span
+    assert "grid-column: 1 / -1;" in desktop_meta
 
 
 def test_desktop_visible_chinese_text_is_not_mojibake():

@@ -122,6 +122,7 @@ class Room:
         self.status = status
         self.host_id = host_id or human_id
         self.members = members or []
+        self.game_seats_by_member_id: dict[str, str] = {}
         self.lock = threading.Lock()
 
     @property
@@ -269,16 +270,20 @@ def create_app() -> FastAPI:
         config = load_config()
         llm = create_deepseek_llm(config)
         graph = build_game_graph(llm)
-        players = _make_multiplayer_players(room.members)
+        game_seats_by_member_id = _assign_multiplayer_seats(room.members)
+        players = _make_multiplayer_players(room.members, game_seats_by_member_id)
         room.graph = graph
         room.state = state_to_graph_state(create_initial_state(players))
         room.status = "playing"
-        room.human_id = payload.player_id
-        return _serialize_room(room, viewer_id=payload.player_id)
+        room.game_seats_by_member_id = game_seats_by_member_id
+        room.host_id = game_seats_by_member_id.get(room.host_id, room.host_id)
+        room.human_id = game_seats_by_member_id.get(payload.player_id, payload.player_id)
+        return _serialize_room(room, viewer_id=room.human_id)
 
     @app.post("/api/rooms/{room_id}/next_stage")
     def next_stage(room_id: str, player_id: Optional[str] = None) -> dict[str, Any]:
         room = _get_room(room_id)
+        player_id = _game_player_id(room, player_id)
         if player_id and player_id != room.host_id:
             raise HTTPException(status_code=403, detail="only host can advance the room.")
         with room.lock:
@@ -294,6 +299,7 @@ def create_app() -> FastAPI:
     @app.post("/api/rooms/{room_id}/submit_action")
     def submit_action(room_id: str, payload: SubmitActionRequest, player_id: Optional[str] = None) -> dict[str, Any]:
         room = _get_room(room_id)
+        player_id = _game_player_id(room, player_id)
         with room.lock:
             if not room.waiting_for:
                 raise HTTPException(status_code=400, detail="No human action is currently required.")
@@ -372,10 +378,17 @@ def _make_players(human_name: str, human_seat: int) -> list[Player]:
     return players
 
 
-def _make_multiplayer_players(members: list[RoomMember]) -> list[Player]:
+def _assign_multiplayer_seats(members: list[RoomMember]) -> dict[str, str]:
+    seat_ids = [str(seat) for seat in range(1, 10)]
+    random.shuffle(seat_ids)
+    return {member.id: seat_ids[index] for index, member in enumerate(members)}
+
+
+def _make_multiplayer_players(members: list[RoomMember], seats_by_member_id: Optional[dict[str, str]] = None) -> list[Player]:
     roles = DEFAULT_ROLES[:]
     random.shuffle(roles)
-    members_by_id = {member.id: member for member in members}
+    seats_by_member_id = seats_by_member_id or {member.id: member.id for member in members}
+    members_by_seat = {seats_by_member_id[member.id]: member for member in members}
     used_avatars = {member.avatar_id for member in members}
     remaining_avatars = [avatar for avatar in AVATAR_CHOICES if avatar["id"] not in used_avatars]
     ai_avatars = iter(remaining_avatars)
@@ -383,7 +396,7 @@ def _make_multiplayer_players(members: list[RoomMember]) -> list[Player]:
     for seat in range(1, 10):
         seat_id = str(seat)
         role = roles[seat - 1]
-        member = members_by_id.get(seat_id)
+        member = members_by_seat.get(seat_id)
         if member:
             players.append(Player(id=seat_id, name=member.name, role=role, is_human=True, avatar_id=member.avatar_id))
             continue
@@ -407,6 +420,12 @@ def _next_member_id(members: list[RoomMember]) -> str:
     raise HTTPException(status_code=400, detail="room is full.")
 
 
+def _game_player_id(room: Room, player_id: Optional[str]) -> Optional[str]:
+    if not player_id:
+        return None
+    return room.game_seats_by_member_id.get(player_id, player_id)
+
+
 def _get_room(room_id: str) -> Room:
     room = ROOMS.get(room_id)
     if room is None:
@@ -420,8 +439,10 @@ def _serialize_room(room: Room, viewer_id: Optional[str] = None) -> dict[str, An
     if room.state is None:
         raise HTTPException(status_code=500, detail="room has no game state.")
     game_state = graph_state_to_game_state(room.state)
-    human_id = viewer_id or room.human_id
-    human = next(player for player in game_state.players if player.id == human_id)
+    human_id = _game_player_id(room, viewer_id) or room.human_id
+    human = next((player for player in game_state.players if player.id == human_id), None)
+    if human is None:
+        raise HTTPException(status_code=404, detail="player not found in room.")
     show_wolf_teammates = human.role == Role.WEREWOLF and not bool(game_state.winner)
     return {
         "room_id": room.room_id,

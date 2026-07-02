@@ -51,6 +51,7 @@ class PackageStaticAssetsTest(unittest.TestCase):
             "werewolf_langgraph/static/home.css",
             "werewolf_langgraph/static/app.js",
             "werewolf_langgraph/static/assets/uploaded-opening-poster-mobile.webp",
+            "werewolf_langgraph/static/assets/game-desktop-village-background.webp",
             "werewolf_langgraph/static/assets/game-mobile-character-background.webp",
             "werewolf_langgraph/static/assets/avatars/human.webp",
             "werewolf_langgraph/static/assets/avatars/garfield.webp",

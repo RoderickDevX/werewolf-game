@@ -17,6 +17,10 @@ let roleRevealed = false;
 let pendingChoice = null;
 let pendingSeerReveal = null;
 let witchActionFlow = null;
+let selectedVoteTargetId = null;
+let voteTargetTurnKey = null;
+let voteTargetOptionsKey = null;
+let voteTargetFocusKey = null;
 
 const LOCAL_SESSION_KEY = "werewolf.roomSession";
 const ROOM_POLL_INTERVAL_MS = 1500;
@@ -323,6 +327,10 @@ function resetLocalGameState() {
   pendingChoice = null;
   pendingSeerReveal = null;
   witchActionFlow = null;
+  selectedVoteTargetId = null;
+  voteTargetTurnKey = null;
+  voteTargetOptionsKey = null;
+  voteTargetFocusKey = null;
   roomRequestInFlight = false;
   roomPollRequestId += 1;
   stopRoomPolling();
@@ -584,6 +592,10 @@ function resetLocalStageState(options = {}) {
   if (currentStage === "day_discussion") {
     resetDiscussionFeed();
   } else if (currentStage === "day_vote") {
+    selectedVoteTargetId = null;
+    voteTargetTurnKey = null;
+    voteTargetOptionsKey = null;
+    voteTargetFocusKey = null;
     resetVoteFeed();
   }
 }
@@ -744,7 +756,11 @@ function renderWaitingAction() {
     renderPlayers(wait.voter_id || room.human_id);
     showLocalEvent(`轮到 ${wait.voter_name || "你"} 投票。请选择一位玩家后提交投票。`);
     const target = document.querySelector("#voteTarget");
-    if (target) target.focus();
+    const focusKey = `${room.room_id}:${room.day}:${wait.voter_id || room.human_id}`;
+    if (target && isMine && voteTargetFocusKey !== focusKey) {
+      target.focus();
+      voteTargetFocusKey = focusKey;
+    }
   }
   if (!isMine) return;
   if (pendingChoice && pendingChoice.kind !== "witch_action") {
@@ -1036,9 +1052,9 @@ function renderPlayers(activeSpeakerId = null) {
     const meta = document.createElement("div");
     meta.className = "player-meta";
     const role = document.createElement("span");
-    role.textContent = roleLabel;
+    role.textContent = `身份：${roleLabel}`;
     const status = document.createElement("span");
-    status.textContent = player.is_alive ? "存活" : "出局";
+    status.textContent = `状态：${player.is_alive ? "存活" : "出局"}`;
     meta.append(role, status);
     card.append(name, meta);
     container.appendChild(card);
@@ -1053,10 +1069,21 @@ function visiblePlayerRole(player) {
 
 function renderVoteTargets() {
   const select = document.querySelector("#voteTarget");
-  const selectedTargetId = select.value;
+  if (!select || !room) return;
+  const wait = room.waiting_for?.kind === "vote" ? room.waiting_for : null;
+  const turnKey = `${room.room_id}:${room.day}:${wait?.voter_id || ""}`;
+  if (voteTargetTurnKey !== turnKey) {
+    selectedVoteTargetId = null;
+    voteTargetTurnKey = turnKey;
+    voteTargetOptionsKey = null;
+    voteTargetFocusKey = null;
+  }
+  const candidates = room.players.filter((player) => player.is_alive && player.id !== room.human_id);
+  const optionsKey = candidates.map((player) => `${player.id}:${player.name}`).join("|");
+  if (document.activeElement === select && voteTargetOptionsKey === optionsKey) return;
+  const selectedTargetId = selectedVoteTargetId || select.value;
   select.innerHTML = "";
-  for (const player of room.players) {
-    if (!player.is_alive || player.id === room.human_id) continue;
+  for (const player of candidates) {
     const option = document.createElement("option");
     option.value = player.id;
     option.textContent = `${player.id}. ${player.name}`;
@@ -1064,7 +1091,11 @@ function renderVoteTargets() {
   }
   if (selectedTargetId && select.querySelector(`option[value="${CSS.escape(selectedTargetId)}"]`)) {
     select.value = selectedTargetId;
+    selectedVoteTargetId = selectedTargetId;
+  } else {
+    selectedVoteTargetId = select.value || null;
   }
+  voteTargetOptionsKey = optionsKey;
 }
 
 function renderEvents() {
@@ -1101,6 +1132,7 @@ async function submitSpeech() {
 async function submitVote() {
   const targetId = document.querySelector("#voteTarget").value;
   if (!targetId) return;
+  selectedVoteTargetId = targetId;
   await submitAction({ kind: "vote", target_id: targetId });
 }
 
@@ -1472,3 +1504,9 @@ document.querySelector("#discussionNextButton")?.addEventListener("click", nextS
 document.querySelector("#voteResultNextButton")?.addEventListener("click", nextStage);
 document.querySelector("#speechButton")?.addEventListener("click", submitSpeech);
 document.querySelector("#voteButton")?.addEventListener("click", submitVote);
+document.querySelector("#voteTarget")?.addEventListener("input", (event) => {
+  selectedVoteTargetId = event.target.value || null;
+});
+document.querySelector("#voteTarget")?.addEventListener("change", (event) => {
+  selectedVoteTargetId = event.target.value || null;
+});

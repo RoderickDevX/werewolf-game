@@ -22,8 +22,8 @@ def test_werewolf_subdomain_serves_game():
     assert "id=\"lobbyScreen\"" in response.text
     assert "id=\"waitingRoomScreen\"" in response.text
     assert "id=\"gameScreen\"" in response.text
-    assert "styles.css?v=20260627-desktop-background-cover" in response.text
-    assert "app.js?v=20260603-multiplayer-lobby" in response.text
+    assert "styles.css?v=20260702-player-meta-pills" in response.text
+    assert "app.js?v=20260702-final-result-step-player-meta-pills-vote-select-lock" in response.text
     assert "RoderickDev" not in response.text
 
 
